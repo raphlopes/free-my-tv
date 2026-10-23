@@ -424,6 +424,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         recs.addListener(this);
         data.refreshIfStale();
         recs.refreshIfStale();
+        Sound.refresh(activity, () -> setDrawerItems(drawerList(activity)));
         if (tvInputs != null) tvInputs.registerCallback(inputCallback, handler);
         handler.postDelayed(tick, 15_000);
         checkNotices();
@@ -1443,7 +1444,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         while (inputs < list.size() && (list.get(inputs).kind == HomeApps.INPUT || list.get(inputs).kind == HomeApps.LIVE_TV)) inputs++;
         boolean same = list.size() == drawerItems.size();
         for (int i = 0; same && i < list.size(); i++) {
-            same = list.get(i).key.equals(drawerItems.get(i).key) && list.get(i).connected == drawerItems.get(i).connected;
+            same = list.get(i).key.equals(drawerItems.get(i).key) && list.get(i).connected == drawerItems.get(i).connected
+                    && java.util.Objects.equals(list.get(i).label, drawerItems.get(i).label);   // the sound button's label changes
         }
         drawerItems = list;
         drawerInputs = inputs;
@@ -2237,6 +2239,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             r = tileRects[shelfIndex];
         }
         click.open();
+        if (it.kind == HomeApps.SOUND) {
+            Sound.toggle(activity, ok -> {
+                setDrawerItems(drawerList(activity));
+                if (!ok) showToast(Ui.tr("Couldn't change the sound output."));
+            });
+            return;
+        }
         if (it.kind == HomeApps.ALL_APPS) {
             openSheet();
             return;

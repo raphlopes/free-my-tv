@@ -190,5 +190,8 @@
  "{n} h ago": "il y a {n} h",
  "{n} min ago": "il y a {n} min",
  "{n} ms": "{n} ms",
- "← → to move · OK to drop · Back to cancel": "← → déplacer · OK déposer · Retour annuler"
+ "← → to move · OK to drop · Back to cancel": "← → déplacer · OK déposer · Retour annuler",
+ "Couldn't change the sound output.": "Impossible de changer la sortie son.",
+ "Sound: TV speakers": "Son : haut-parleurs TV",
+ "Sound: soundbar": "Son : barre de son"
 }

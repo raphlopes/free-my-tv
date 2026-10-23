@@ -57,6 +57,8 @@ final class HomeApps {
     static final int APP = 0, LIVE_TV = 1, INPUT = 2, ALL_APPS = 3, SETTINGS = 4, ANDROID_SETTINGS = 5;
     /** The "HDMI Inputs" button: opens the bottom drawer on the inputs (the home screen handles it). */
     static final int INPUTS = 7;
+    /** TCL: speakers ⇄ soundbar (Sound), in the bottom drawer. */
+    static final int SOUND = 8;
     /** Image size of each card (16:9; on screen it shows up to ~330 px wide). */
     static final int TILE_W = 384, TILE_H = 216;
 
@@ -258,6 +260,9 @@ final class HomeApps {
         items.add(shortcut(ALL_APPS, "all", Ui.tr("All Apps"), "apps"));
         items.add(shortcut(SETTINGS, "settings", Ui.tr("Home Settings"), "settings"));
         items.add(shortcut(ANDROID_SETTINGS, "tv-settings", Ui.tr("TV Settings"), "tv_settings"));
+        String out = Sound.out();
+        if (out != null) items.add(0, shortcut(SOUND, "sound",
+                Sound.OPTICAL.equals(out) ? Ui.tr("Sound: soundbar") : Ui.tr("Sound: TV speakers"), "speaker"));
         return items;
     }
 
