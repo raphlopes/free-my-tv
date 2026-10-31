@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Free My TV (maison) : design system TV</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<style>
+/* Mise en page de la planche seulement (pas des jetons) */
+body{margin:0;background:var(--bg);color:var(--ink);font:400 20px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+.board{position:relative;width:1920px;padding:96px 96px 120px;isolation:isolate}
+.board>.tv-glows{position:absolute}
+h2.sec{display:flex;justify-content:space-between;align-items:end;margin:88px 0 32px;padding-top:28px;border-top:1px solid var(--line-2);font:400 56px/1 var(--serif);letter-spacing:-.02em}
+h2.sec span{font:450 18px/1 var(--mono);color:var(--muted)}
+.lead{max-width:62ch;color:var(--muted);font-size:24px;line-height:1.55;margin-top:28px}
+.grid{display:grid;gap:24px}
+.g6{grid-template-columns:repeat(6,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:1fr 1fr}.g4{grid-template-columns:repeat(4,1fr)}
+.sw{border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--surface)}
+.sw i{display:block;height:120px}
+.sw div{padding:16px 18px 18px}
+.sw b{display:block;font:500 20px/1.2 var(--sans)}
+.sw code{font:450 15px/1.4 var(--mono);color:var(--muted)}
+.sw p{font-size:16px;color:var(--muted);margin-top:6px;line-height:1.35}
+.rule{padding:28px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface)}
+.rule .tv-label--em{margin-bottom:14px}
+.rule b{display:block;font:500 26px/1.15 var(--sans);letter-spacing:-.02em;margin-bottom:10px}
+.rule p{color:var(--muted);font-size:19px;line-height:1.45}
+.spec{display:grid;grid-template-columns:260px 1fr;gap:28px;align-items:baseline;padding:22px 0;border-top:1px solid var(--line)}
+.spec code{font:450 16px/1.4 var(--mono);color:var(--muted)}
+.stage{display:flex;flex-wrap:wrap;gap:40px 56px;align-items:center;padding:56px;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--bg-2)}
+.stage .cap{font:450 16px/1.3 var(--mono);color:var(--muted);margin-top:22px;text-align:center}
+.screen{border:1px solid var(--line-2);border-radius:var(--r-md);overflow:hidden;width:845px;height:475px}
+.screen iframe{width:1920px;height:1080px;border:0;transform:scale(.44);transform-origin:0 0}
+.radius{display:flex;gap:40px;align-items:end}
+.radius div{background:var(--surface-2);border:1px solid var(--line-2);display:grid;place-items:end start;padding:14px;font:450 16px/1.2 var(--mono);color:var(--muted)}
+.light{background:#f5f4f0;color:#02070a}
+</style>
+</head>
+<body>
+<main class="board">
+  <div class="tv-glows"></div>
+
+  <div class="tv-label"><span class="tv-dot" style="margin-right:14px"></span>Design system TV · dérivé de Midnight v2 · octobre 2026</div>
+  <h1 class="tv-display" style="font-size:132px;margin-top:28px">Free My TV, <em>maison</em></h1>
+  <p class="lead">L'écran d'accueil de la TV du salon et du projo, avec les couleurs, les typos et les rôles du dashboard (Midnight). Ce qui change : la distance de lecture (2 à 4 m), la télécommande à la place du pointeur, et un projecteur qui éclaire la pièce avec tout ce qui est clair.</p>
+
+  <h2 class="sec">Principes <span>01</span></h2>
+  <div class="grid g3">
+    <div class="rule"><div class="tv-label tv-label--em">Bleu = focus</div><b>Un seul élément bleu à l'écran</b><p>Le bleu électrique marque ce que la télécommande va ouvrir : contour encre, halo bleu, l'élément grandit de 6 %. Rien d'autre n'est bleu en grand.</p></div>
+    <div class="rule"><div class="tv-label tv-label--em">Cantaloup = la voix</div><b>L'accent, jamais l'action</b><p>Le mot d'accent d'un titre (Instrument Serif italique), les index « 01 », « Reprendre », ce qui est allumé dans le salon.</p></div>
+    <div class="rule"><div class="tv-label tv-label--em">Lisible à 4 m</div><b>22 px minimum, 4,5:1 partout</b><p>Étiquettes en Geist Mono 22 px au plus petit, tout texte à 4,5:1 sur son fond, de jour comme de nuit et sur le projo.</p></div>
+    <div class="rule"><div class="tv-label tv-label--em">Zone sûre</div><b>5 % de marge sur chaque bord</b><p>96 px à gauche et à droite, 54 px en haut et en bas : certaines TV rognent l'image (overscan).</p></div>
+    <div class="rule"><div class="tv-label tv-label--em">Trois rangées</div><b>Héros, apps, salon</b><p>Pas de défilement vertical sur l'accueil. Le bouton Home ramène toujours sur le héros, en haut à gauche.</p></div>
+    <div class="rule"><div class="tv-label tv-label--em">Projo</div><b>Noir Midnight, rien de clair en grand</b><p>Sur le projecteur, pas d'aube ni de photo plein écran : le fond reste noir et seul le texte est clair.</p></div>
+  </div>
+
+  <h2 class="sec">Couleurs <span>02 · nuit (défaut)</span></h2>
+  <div class="grid g6">
+    <div class="sw"><i style="background:#02070a"></i><div><b>Fond</b><code>--bg #02070A</code><p>Midnight Black</p></div></div>
+    <div class="sw"><i style="background:#08141b"></i><div><b>Surface</b><code>--surface #08141B</code><p>Tuiles, cartes</p></div></div>
+    <div class="sw"><i style="background:#0d1c25"></i><div><b>Surface 2</b><code>--surface-2 #0D1C25</code><p>Tuiles d'app</p></div></div>
+    <div class="sw"><i style="background:#eef3f6"></i><div><b>Encre</b><code>--ink #EEF3F6</code><p>Titres, contour de focus</p></div></div>
+    <div class="sw"><i style="background:#93a5b2"></i><div><b>Atténué</b><code>--muted #93A5B2</code><p>Méta, étiquettes</p></div></div>
+    <div class="sw"><i style="background:#70879a"></i><div><b>Discret</b><code>--dim #70879A</code><p>Aides, 4,5:1 sur le fond</p></div></div>
+    <div class="sw"><i style="background:#0297de"></i><div><b>Electric Blue</b><code>--accent #0297DE</code><p>Focus, action, progression</p></div></div>
+    <div class="sw"><i style="background:#4fbbee"></i><div><b>Lueur</b><code>--glow #4FBBEE</code><p>Halo du focus</p></div></div>
+    <div class="sw"><i style="background:#fc734d"></i><div><b>Cantaloupe</b><code>--warm #FC734D</code><p>Accent, index, « allumé »</p></div></div>
+    <div class="sw"><i style="background:#3fd28f"></i><div><b>OK</b><code>--ok #3FD28F</code><p>Connecté, réussi</p></div></div>
+    <div class="sw"><i style="background:#f2b544"></i><div><b>Attente</b><code>--warn #F2B544</code><p>En cours, à vérifier</p></div></div>
+    <div class="sw"><i style="background:#f2557a"></i><div><b>Erreur</b><code>--danger #F2557A</code><p>Échec (toast)</p></div></div>
+  </div>
+  <div class="grid g6" style="margin-top:24px">
+    <div class="sw light"><i style="background:#f5f4f0;border-bottom:1px solid rgba(2,7,10,.09)"></i><div><b>Jour : fond</b><code style="color:#4f5b63">#F5F4F0</code></div></div>
+    <div class="sw light"><i style="background:#fdfcfa;border-bottom:1px solid rgba(2,7,10,.09)"></i><div><b>Jour : surface</b><code style="color:#4f5b63">#FDFCFA</code></div></div>
+    <div class="sw light"><i style="background:#02070a"></i><div><b>Jour : encre</b><code style="color:#4f5b63">#02070A</code></div></div>
+    <div class="sw light"><i style="background:#02699d"></i><div><b>Jour : bleu</b><code style="color:#4f5b63">#02699D</code></div></div>
+    <div class="sw light"><i style="background:#d24e29"></i><div><b>Jour : accent</b><code style="color:#4f5b63">#D24E29</code></div></div>
+    <div class="sw"><i style="background:radial-gradient(60% 55% at 50% 108%,rgba(252,115,77,.42),rgba(252,115,77,0) 60%),radial-gradient(75% 85% at 50% 115%,rgba(2,151,222,.38),rgba(2,151,222,0) 70%),#02070a"></i><div><b>Aube</b><code>--aurora</code><p>Fond du héros sans photo</p></div></div>
+  </div>
+
+  <h2 class="sec">Typographie <span>03 · base 1920×1080</span></h2>
+  <div class="spec"><code>Horloge · Geist 300 · 104</code><div class="tv-clock">21:47</div></div>
+  <div class="spec"><code>Héros · Instrument Serif · 88</code><div class="tv-display">Slow <em>Horses</em></div></div>
+  <div class="spec"><code>Titre d'écran · Serif · 56</code><div class="tv-title">Toutes les <em>apps</em></div></div>
+  <div class="spec"><code>Tuile · Geist 500 · 34</code><div class="tv-h3">Dune : deuxième partie</div></div>
+  <div class="spec"><code>Méta · Geist 400 · 28</code><div class="tv-meta">Saison 4 · Épisode 3 · 23 min restantes</div></div>
+  <div class="spec"><code>Étiquette · Geist Mono · 22</code><div class="tv-label">01 · Tendance · Stremio</div></div>
+
+  <h2 class="sec">Formes et espaces <span>04</span></h2>
+  <div class="grid g2" style="align-items:center">
+    <div class="radius">
+      <div style="width:120px;height:80px;border-radius:6px">6 · badge</div>
+      <div style="width:160px;height:100px;border-radius:12px">12 · contrôle</div>
+      <div style="width:200px;height:120px;border-radius:18px">18 · tuile</div>
+      <div style="width:240px;height:150px;border-radius:24px">24 · héros</div>
+    </div>
+    <p class="lead" style="margin:0">Les rôles des rayons du web (4 / 8 / 12 / 16) ×1,5 pour la distance. Pilule réservée aux jauges. Grille de 8 : 8, 16, 24, 32, 48, 64, 96. Les tuiles d'une rangée sont espacées de 24, les rangées de 26 + titre de section.</p>
+  </div>
+
+  <h2 class="sec">Focus <span>05 · le seul repère de la télécommande</span></h2>
+  <div class="grid g2">
+    <div class="stage">
+      <div><div class="tv-app" style="--brand:#e50914">NETFLIX</div><div class="cap">Au repos</div></div>
+      <div><div class="tv-app is-focus" style="--brand:#e50914">NETFLIX</div><div class="cap">Focus · nuit</div></div>
+      <div><span class="tv-button">Reprendre</span><div class="cap">Bouton</div></div>
+      <div><span class="tv-button tv-button--focus">Reprendre</span><div class="cap">Bouton focus</div></div>
+    </div>
+    <div class="stage" data-device="projo" style="background:#02070a">
+      <div><div class="tv-poster" style="width:220px;height:220px"><b style="font-size:32px">YouTube</b></div><div class="cap">Projo · repos</div></div>
+      <div><div class="tv-poster is-focus" style="width:220px;height:220px"><b style="font-size:32px">Netflix</b></div><div class="cap">Projo · focus</div></div>
+      <p class="lead" style="font-size:19px;margin:0;flex:1 1 100%">Sur le projo, le focus est un contour bleu sans grand halo : une lueur de 40 px suffit dans le noir.</p>
+    </div>
+  </div>
+
+  <h2 class="sec">Composants <span>06</span></h2>
+  <div class="grid g3" style="align-items:start">
+    <div><div class="tv-label" style="margin-bottom:16px">Pastilles d'état</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap"><span class="tv-chip"><span class="tv-dot"></span>Ambiance soir</span><span class="tv-chip">Son : barre de son</span></div></div>
+    <div><div class="tv-label" style="margin-bottom:16px">Tuiles Salon (Home Assistant)</div>
+      <div class="tv-row"><div class="tv-tile"><b>Cinéma</b><span>Lumières 10 %</span></div><div class="tv-tile is-on"><b>Ambiance</b><span>Active</span></div></div></div>
+    <div><div class="tv-label" style="margin-bottom:16px">Jauge « Reprendre »</div>
+      <div class="tv-meter" style="width:420px"><span style="--value:62%"></span></div>
+      <p class="tv-meta" style="margin-top:14px;font-size:22px">23 min restantes</p></div>
+  </div>
+  <div class="grid g2" style="margin-top:40px">
+    <div><div class="tv-label" style="margin-bottom:16px">Carte suggestion → fiche Stremio</div>
+      <article class="tv-card" style="height:300px"><div class="tv-card-art art-2"></div><div class="tv-card-body"><div class="tv-label tv-label--em">02 · Tendance · Stremio</div><h3 class="tv-h3">Severance</h3><p class="tv-meta">Série · Thriller · 2 saisons</p></div></article></div>
+    <div><div class="tv-label" style="margin-bottom:16px">Aides télécommande</div>
+      <div class="tv-hints" style="margin:0;flex-wrap:wrap;row-gap:20px"><span><kbd>OK</kbd>ouvrir</span><span><kbd>OK long</kbd>réorganiser</span><span><kbd>⌂</kbd>retour au héros</span></div></div>
+  </div>
+
+  <h2 class="sec">Écrans <span>07 · design/maquette.html</span></h2>
+  <div class="grid g2">
+    <div><div class="screen"><iframe src="maquette.html#tv"></iframe></div><div class="tv-label" style="margin-top:16px">TV du salon · le soir · focus sur « Reprendre »</div></div>
+    <div><div class="screen"><iframe src="maquette.html#projo"></iframe></div><div class="tv-label" style="margin-top:16px">Projo XGIMI · noir · un seul rang</div></div>
+  </div>
+</main>
+</body>
+</html>

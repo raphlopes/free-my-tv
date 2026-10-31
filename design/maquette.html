@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Free My TV (maison) : maquettes 1920×1080</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+</head>
+<body class="tv-body">
+
+<!-- maquette.html#tv : la TV du salon, le soir -->
+<section class="tv-screen" id="tv">
+  <div class="tv-glows"></div>
+  <header class="tv-top">
+    <div>
+      <div class="tv-clock">21:47</div>
+      <div class="tv-date">Mercredi 22 octobre</div>
+    </div>
+    <div class="tv-status">
+      <span class="tv-chip"><span class="tv-dot"></span>Ambiance soir</span>
+      <span class="tv-chip">Son : barre de son</span>
+      <span class="tv-weather">13°<small>Averses</small></span>
+    </div>
+  </header>
+
+  <div class="tv-hero-row">
+    <article class="tv-hero is-focus">
+      <div class="tv-hero-art art-1"></div>
+      <div class="tv-hero-scrim"></div>
+      <div class="tv-hero-body">
+        <div class="tv-label tv-label--em">01 · Reprendre · Netflix</div>
+        <h1 class="tv-display">Slow <em>Horses</em></h1>
+        <p class="tv-meta">Saison 4 · Épisode 3 · 23 min restantes</p>
+        <div class="tv-meter"><span style="--value:62%"></span></div>
+        <span class="tv-button">Reprendre</span>
+      </div>
+    </article>
+    <article class="tv-card">
+      <div class="tv-card-art art-2"></div>
+      <div class="tv-card-body">
+        <div class="tv-label tv-label--em">02 · Tendance · Stremio</div>
+        <h3 class="tv-h3">Severance</h3>
+        <p class="tv-meta">Série · Thriller · 2 saisons</p>
+      </div>
+    </article>
+    <article class="tv-card">
+      <div class="tv-card-art art-3"></div>
+      <div class="tv-card-body">
+        <div class="tv-label tv-label--em">03 · Tendance · Stremio</div>
+        <h3 class="tv-h3">Dune : deuxième partie</h3>
+        <p class="tv-meta">Film · SF · 2&nbsp;h&nbsp;46</p>
+      </div>
+    </article>
+  </div>
+
+  <div class="tv-section"><span class="tv-label">Apps</span></div>
+  <div class="tv-row">
+    <div class="tv-app" style="--brand:#e50914">NETFLIX</div>
+    <div class="tv-app" style="--brand:#ffffff">YouTube</div>
+    <div class="tv-app" style="--brand:#ffffff">CANAL+</div>
+    <div class="tv-app" style="--brand:#8fb3ff">Disney+</div>
+    <div class="tv-app" style="--brand:#6fc6f2">prime video</div>
+    <div class="tv-app" style="--brand:#a98cff">Stremio</div>
+    <div class="tv-app tv-app--more">Toutes</div>
+  </div>
+
+  <div class="tv-section"><span class="tv-label">Salon</span></div>
+  <div class="tv-row">
+    <div class="tv-tile"><b>Cinéma</b><span>Lumières 10 %</span></div>
+    <div class="tv-tile is-on"><b>Ambiance</b><span>Active</span></div>
+    <div class="tv-tile"><b>Tout éteindre</b><span>Lumières + TV</span></div>
+    <div class="tv-tile"><b>Son</b><span>Barre de son</span></div>
+    <div class="tv-tile"><b>Entrées</b><span>HDMI 1 · HDMI 2</span></div>
+  </div>
+
+  <footer class="tv-hints"><span><kbd>Flèches</kbd>naviguer</span><span><kbd>OK</kbd>ouvrir</span><span><kbd>OK long</kbd>réorganiser</span><span><kbd>⌂</kbd>revient en haut à gauche</span></footer>
+</section>
+
+<!-- maquette.html#projo : le XGIMI, noir, un seul rang -->
+<section class="tv-screen" id="projo" data-device="projo">
+  <div class="tv-glows"></div>
+  <header class="tv-top tv-top--quiet">
+    <div class="tv-clock tv-clock--sm">21:47</div>
+    <span class="tv-chip">Lumières : 0 %</span>
+  </header>
+  <div class="tv-center">
+    <div class="tv-label">Ce soir</div>
+    <div class="tv-row tv-row--big">
+      <div class="tv-poster is-focus"><div class="tv-label tv-label--em">Reprendre</div><b>Netflix</b><span>Slow Horses · S4 É3</span></div>
+      <div class="tv-poster"><div class="tv-label">Tendance</div><b>Stremio</b><span>Severance</span></div>
+      <div class="tv-poster"><div class="tv-label">App</div><b>YouTube</b><span>Abonnements</span></div>
+      <div class="tv-poster"><div class="tv-label">App</div><b>Disney+</b><span>Récents</span></div>
+      <div class="tv-poster"><div class="tv-label">&nbsp;</div><b>Toutes</b><span>Les apps</span></div>
+    </div>
+    <div class="tv-row tv-row--quick">
+      <span class="tv-chip tv-chip--big">Mise au point</span><span class="tv-chip tv-chip--big">Trapèze</span>
+      <span class="tv-chip tv-chip--big">Luminosité éco</span><span class="tv-chip tv-chip--big">HDMI</span>
+    </div>
+  </div>
+  <footer class="tv-hints"><span><kbd>OK</kbd>lancer</span><span><kbd>Bas</kbd>réglages du projo</span></footer>
+</section>
+
+<script>document.getElementById(location.hash === '#projo' ? 'projo' : 'tv').classList.add('is-on-screen')</script>
+</body>
+</html>
