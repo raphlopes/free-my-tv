@@ -47,7 +47,8 @@ p,h1,h2,h3{margin:0}
 /* Affiche (suggestion → fiche Stremio) : 2:3, le titre est dans l'image ; seul un repère d'origine en haut */
 .tv-poster{--r:var(--r-md);--grow:calc(1 + 24 / 280);flex:none;width:280px;height:420px;border-radius:var(--r)}
 .tv-poster .tv-photo::after{background:linear-gradient(0deg,rgba(2,7,10,.75),rgba(2,7,10,0) 45%)}
-.tv-tag{position:absolute;top:18px;left:18px;padding:7px 12px;border-radius:var(--r-xs);background:rgba(2,7,10,.72);font:500 22px/1 var(--sans);color:var(--ink)}
+.tv-tag{position:absolute;top:18px;left:18px;display:flex;align-items:center;gap:8px;padding:7px 12px 7px 9px;border-radius:var(--r-xs);background:rgba(2,7,10,.72);font:500 22px/1 var(--sans);color:var(--ink)}
+.tv-tag img{width:22px;height:22px}
 /* Imitation du titre imprimé sur l'affiche (dans l'app : l'affiche TMDB le porte déjà) */
 .tv-poster-art{position:absolute;left:24px;right:24px;bottom:28px;font:800 38px/.92 var(--sans);letter-spacing:0;text-transform:uppercase;color:#fff}
 .tv-poster-art small{display:block;font:600 18px/1.2 var(--sans);letter-spacing:.24em;margin-top:10px;opacity:.85}
