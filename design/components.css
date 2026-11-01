@@ -1,89 +1,94 @@
 /* Free My TV (maison) : composants TV, préfixés `tv-`. Dépend de tokens.css.
-   Référence visuelle pour HomeView.java (l'app dessine à la main sur un Canvas : ces classes décrivent quoi dessiner,
-   pas du CSS à embarquer). Une maquette = 1920×1080. */
+   Référence visuelle pour HomeView.java (Canvas) : ces classes décrivent quoi dessiner, rien n'est embarqué.
+   Grille de l'écran TV (contenu 1728 × 972) : en-tête 56 · 24 · héros 420 · 40 · Apps 26+16+123 · 40 · Salon 26+16+110. */
 
 *,*::before,*::after{box-sizing:border-box}
 p,h1,h2,h3{margin:0}
-.tv-body{margin:0;background:#000;color:var(--ink);font:400 var(--t-body)/1.3 var(--sans);-webkit-font-smoothing:antialiased}
-em{font-family:var(--serif);font-style:italic;font-weight:400;color:var(--em)}
+.tv-body{margin:0;background:#000;color:var(--ink);font:500 var(--t-meta)/1.3 var(--sans);-webkit-font-smoothing:antialiased}
 
 /* ---------- Écran ---------- */
 .tv-screen{position:relative;width:1920px;height:1080px;padding:var(--safe-y) var(--safe-x);display:none;flex-direction:column;overflow:hidden;background:var(--bg);isolation:isolate}
-.tv-screen.is-on-screen,.tv-screen.is-shown{display:flex}
-.tv-glows{position:absolute;inset:0;z-index:-1;background:radial-gradient(1100px 620px at 80% -8%,var(--glow-a),transparent 64%),radial-gradient(900px 600px at 2% 110%,var(--glow-b),transparent 66%)}
+.tv-screen.is-on-screen{display:flex}
+.tv-glows{position:absolute;inset:0;z-index:-1;background:radial-gradient(1100px 620px at 82% -10%,var(--glow-a),transparent 66%),radial-gradient(900px 600px at 0% 112%,var(--glow-b),transparent 66%)}
 
 /* ---------- Texte ---------- */
-.tv-label{font:450 var(--t-label)/1.3 var(--mono);color:var(--muted);letter-spacing:0}
-.tv-label--em{color:var(--em)}
-.tv-display{font:400 var(--t-display)/.95 var(--serif);letter-spacing:-.02em;color:var(--ink)}
-.tv-title{font:400 var(--t-title)/1 var(--serif);letter-spacing:-.02em}
-.tv-h3{font:500 var(--t-h3)/1.1 var(--sans);letter-spacing:-.03em}
-.tv-meta{font-size:var(--t-body);color:var(--muted)}
-.tv-dot{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--warm)}
+.tv-section{font:500 var(--t-section)/1.2 var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.tv-hero-title{font:400 var(--t-hero)/.95 var(--serif);letter-spacing:-.02em}
+.tv-screen-title{font:400 var(--t-screen)/1 var(--serif);letter-spacing:-.02em}
+.tv-screen-title em{font-style:italic;color:var(--warm)}
+.tv-meta{font:500 var(--t-meta)/1.3 var(--sans);color:var(--ink-2)}
+.tv-mark{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--warm);margin-right:12px;vertical-align:1px}
+.tv-warm{color:var(--warm)}
 
-/* ---------- En-tête ---------- */
-.tv-top{display:flex;justify-content:space-between;align-items:flex-start}
-.tv-top--quiet{align-items:center}
-.tv-clock{font:300 var(--t-clock)/1 var(--sans);letter-spacing:-.05em;font-variant-numeric:tabular-nums}
-.tv-clock--sm{font-size:64px;color:var(--muted)}
-.tv-date{font:450 var(--t-label)/1.3 var(--mono);color:var(--muted);margin-top:8px}
-.tv-status{display:flex;align-items:center;gap:var(--s-2)}
-.tv-weather{font:300 56px/1 var(--sans);letter-spacing:-.04em;margin-left:var(--s-2)}
-.tv-weather small{font:450 var(--t-label)/1 var(--mono);color:var(--muted);margin-left:10px;letter-spacing:0}
+/* ---------- En-tête : une ligne, heure + date à gauche, météo à droite ---------- */
+.tv-head{height:56px;display:flex;justify-content:space-between;align-items:center}
+.tv-time{font:400 var(--t-time)/1 var(--sans);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.tv-head .tv-meta{color:var(--muted);margin-left:24px}
+.tv-weather{display:flex;align-items:center;gap:14px;font:400 40px/1 var(--sans);letter-spacing:-.03em}
+.tv-weather .tv-meta{margin:0}
+.tv-weather svg{width:34px;height:34px;color:var(--muted)}
 
-/* Pastille d'état : lue, pas sélectionnable (sauf sur le projo, où elle sert de raccourci) */
-.tv-chip{display:inline-flex;align-items:center;gap:12px;padding:12px 20px;border:1px solid var(--line-2);border-radius:var(--r-sm);background:var(--surface);color:var(--muted);font:450 var(--t-label)/1 var(--mono)}
-.tv-chip--big{padding:16px 26px;font-size:24px}
+/* ---------- Focus : le même pour tout. Trait encre décalé + anneau bleu, sans flou, +12 px par côté ---------- */
+.tv-focusable{position:relative;transition:transform var(--t-focus) var(--ease)}
+.is-focus{transform:scale(var(--grow,1.05));outline:var(--focus-ink) solid var(--ink);outline-offset:var(--focus-gap);z-index:2}
+.is-focus::after{content:"";position:absolute;inset:calc(-1 * (var(--focus-gap) + var(--focus-ink) + var(--focus-ring)));border:var(--focus-ring) solid var(--focus-ring-color);border-radius:calc(var(--r) + var(--focus-gap) + var(--focus-ink) + var(--focus-ring));pointer-events:none}
 
-/* ---------- Focus : un seul élément à la fois, toujours visible à 4 m ---------- */
-.is-focus{transform:scale(var(--focus-scale));box-shadow:var(--focus-ring);z-index:2;border-color:transparent!important}
+/* ---------- Héros : photo TMDB, logo du titre (ou le serif en repli), jauge si « Reprendre » ---------- */
+.tv-hero-row{display:flex;gap:var(--gap);height:420px;margin-top:32px}
+.tv-hero{--r:var(--r-lg);--grow:calc(1 + 24 / 1104);flex:none;width:1104px;height:420px;border-radius:var(--r)}
+.tv-photo{position:absolute;inset:0;border-radius:inherit;overflow:hidden;background:var(--surface) center/cover no-repeat}
+.tv-photo::after{content:"";position:absolute;inset:0}
+.tv-hero .tv-photo::after{background:var(--scrim-side),var(--scrim-foot)}
+.tv-hero-body{position:absolute;left:48px;bottom:44px;width:620px;display:flex;flex-direction:column;gap:14px}
+.tv-hero-body .tv-section{color:var(--warm)}
+.tv-meter{height:6px;width:420px;border-radius:var(--r-pill);background:rgba(238,243,246,.18);overflow:hidden;margin-top:8px}
+.tv-meter>span{display:block;height:100%;width:var(--value,0%);background:var(--ink);border-radius:inherit}
 
-/* ---------- Héros : « Reprendre » s'il y a de quoi, sinon la suggestion du moment ---------- */
-.tv-hero-row{display:grid;grid-template-columns:1fr 380px 380px;gap:var(--s-4);height:300px;margin-top:28px}
-.tv-hero,.tv-card{position:relative;border-radius:var(--r-lg);overflow:hidden;border:1px solid var(--line);background:var(--surface)}
-.tv-hero-art,.tv-card-art{position:absolute;inset:0}
-.tv-hero-scrim{position:absolute;inset:0;background:var(--scrim)}
-.tv-hero-body{position:absolute;inset:0;padding:36px 40px;display:flex;flex-direction:column;justify-content:flex-end;gap:12px}
-.tv-hero .tv-button{position:absolute;top:36px;right:40px}
-.tv-card-body{position:absolute;inset:auto 0 0 0;padding:28px 30px;display:flex;flex-direction:column;gap:8px;background:linear-gradient(0deg,rgba(2,7,10,.94) 30%,rgba(2,7,10,0))}
-/* Photos factices (TMDB fournit les vraies) */
-.art-1{background:radial-gradient(70% 90% at 85% 30%,#7a4a2e,transparent 70%),linear-gradient(120deg,#0d1c25,#3a2a22)}
-.art-2{background:radial-gradient(80% 70% at 60% 20%,#2b6a7a,transparent 70%),linear-gradient(160deg,#08141b,#16293a)}
-.art-3{background:radial-gradient(80% 70% at 40% 25%,#b07a3a,transparent 70%),linear-gradient(160deg,#2a1a0e,#08141b)}
-
-/* Bouton : encre pleine ; focalisé, il passe au bleu (la seule action de l'écran) */
-.tv-button{display:inline-flex;align-items:center;gap:12px;padding:16px 26px;border-radius:var(--r-sm);background:var(--ink);color:var(--bg);font:500 24px/1 var(--sans);letter-spacing:-.01em}
-.tv-button--focus,.is-focus .tv-button{background:var(--accent);color:var(--on-accent)}
-
-/* Jauge de progression (Reprendre) */
-.tv-meter{height:8px;border-radius:var(--r-pill);background:rgba(238,243,246,.18);overflow:hidden;max-width:880px;margin-top:6px}
-.tv-meter>span{display:block;height:100%;width:var(--value,0%);background:var(--accent);border-radius:inherit}
+/* Affiche (suggestion → fiche Stremio) : 2:3, le titre est dans l'image ; seul un repère d'origine en haut */
+.tv-poster{--r:var(--r-md);--grow:calc(1 + 24 / 280);flex:none;width:280px;height:420px;border-radius:var(--r)}
+.tv-poster .tv-photo::after{background:linear-gradient(0deg,rgba(2,7,10,.75),rgba(2,7,10,0) 45%)}
+.tv-tag{position:absolute;top:18px;left:18px;padding:7px 12px;border-radius:var(--r-xs);background:rgba(2,7,10,.72);font:500 22px/1 var(--sans);color:var(--ink)}
+/* Imitation du titre imprimé sur l'affiche (dans l'app : l'affiche TMDB le porte déjà) */
+.tv-poster-art{position:absolute;left:24px;right:24px;bottom:28px;font:800 38px/.92 var(--sans);letter-spacing:0;text-transform:uppercase;color:#fff}
+.tv-poster-art small{display:block;font:600 18px/1.2 var(--sans);letter-spacing:.24em;margin-top:10px;opacity:.85}
 
 /* ---------- Rangées ---------- */
-.tv-section{margin:26px 0 14px}
-.tv-row{display:flex;gap:var(--s-3)}
+.tv-row-title{margin:40px 0 16px}
+.tv-row{display:flex;gap:var(--gap)}
 
-/* Tuile d'app : le logo de la marque dans sa couleur, sur une surface Midnight (jamais un aplat de marque) */
-.tv-app{flex:none;width:228px;height:128px;display:grid;place-items:center;border-radius:var(--r-md);border:1px solid var(--line);background:var(--surface-2);color:var(--brand,var(--ink));font:700 32px/1 var(--sans);letter-spacing:-.02em}
-.tv-app--more{color:var(--muted);font:450 var(--t-label)/1 var(--mono)}
+/* Tuile d'app = la bannière Android TV de l'app (pm.getApplicationBanner, 16:9), plein cadre, sans bordure */
+.tv-app{--r:var(--r-md);--grow:calc(1 + 24 / 219);flex:none;width:219px;height:123px;border-radius:var(--r);display:grid;place-items:center;background:var(--brand-bg,var(--surface-2));overflow:visible}
+.tv-app img{max-width:62%;max-height:46%;object-fit:contain}
+.tv-app .tv-wordmark{font:700 30px/1 var(--sans);letter-spacing:-.02em;color:var(--brand-ink,#fff)}
+/* Repli sans bannière : l'icône 72 px et le nom */
+.tv-app--fallback{background:var(--surface-2);grid-template-columns:auto;gap:8px;align-content:center}
+.tv-app--fallback i{width:48px;height:48px;border-radius:12px;background:var(--line-2);justify-self:center}
+.tv-app--fallback span{font:500 22px/1 var(--sans);color:var(--ink)}
 
-/* Tuile Salon (Home Assistant) : titre + état ; allumée = teinte cantaloup + repère */
-.tv-tile{flex:none;width:282px;height:128px;padding:24px 26px;display:flex;flex-direction:column;justify-content:space-between;border-radius:var(--r-md);border:1px solid var(--line);background:var(--surface)}
-.tv-tile b{font:500 30px/1 var(--sans);letter-spacing:-.03em}
-.tv-tile span{font:450 var(--t-label)/1 var(--mono);color:var(--muted)}
-.tv-tile.is-on{background:var(--warm-tint);border-color:rgba(252,115,77,.45)}
-.tv-tile.is-on span{color:var(--em)}
+/* Tuile Salon (Home Assistant) : pictogramme, titre, état ; allumé = fond cantaloup 8 % + repère, sans bordure */
+.tv-tile{--r:var(--r-md);--grow:calc(1 + 24 / 320);flex:none;width:320px;height:110px;border-radius:var(--r);padding:0 26px;display:flex;align-items:center;gap:20px;background:var(--surface)}
+.tv-tile svg{flex:none;width:36px;height:36px;color:var(--ink-2)}
+.tv-tile b{display:block;font:500 var(--t-tile)/1.1 var(--sans);letter-spacing:-.02em}
+.tv-tile span{display:block;font:500 var(--t-meta)/1.2 var(--sans);color:var(--muted);margin-top:6px}
+.tv-tile.is-on{background:var(--warm-tint)}
+.tv-tile.is-on svg{color:var(--warm)}
+.tv-tile.is-on span{color:var(--warm)}
 .tv-tile.is-on span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--warm);margin-right:10px;vertical-align:1px}
 
-/* ---------- Projo ---------- */
-.tv-center{margin:auto 0;display:flex;flex-direction:column;gap:24px}
-.tv-row--big{gap:var(--s-4)}
-.tv-row--quick{gap:var(--s-2);margin-top:24px}
-.tv-poster{flex:none;width:300px;height:300px;padding:30px;display:flex;flex-direction:column;justify-content:flex-end;gap:8px;border-radius:var(--r-lg);border:1px solid var(--line);background:var(--surface)}
-.tv-poster .tv-label{margin-bottom:auto}
-.tv-poster b{font:500 40px/1 var(--sans);letter-spacing:-.03em}
-.tv-poster span{font-size:24px;color:var(--muted)}
+/* ---------- Projo : pas de surfaces, des images 16:9 et leur légende ---------- */
+.tv-center{margin:auto 0;display:flex;flex-direction:column}
+.tv-frame{--r:var(--r-sm);--grow:calc(1 + 24 / 320);flex:none;width:320px}
+.tv-frame .tv-thumb{position:relative;height:180px;border-radius:var(--r);overflow:hidden;background:var(--surface) center/cover no-repeat}
+.tv-frame.is-focus{outline:none;transform:none}
+.tv-frame.is-focus::after{display:none}
+.tv-frame.is-focus .tv-thumb{outline:var(--focus-ink) solid var(--ink);outline-offset:var(--focus-gap);transform:scale(var(--grow))}
+.tv-frame b{display:block;font:500 32px/1.1 var(--sans);letter-spacing:-.02em;margin-top:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}   /* une ligne, toujours */
+.tv-frame span{display:block;font:500 var(--t-meta)/1.2 var(--sans);color:var(--muted);margin-top:6px}
+.tv-frame span.tv-warm{color:var(--warm)}
+.tv-quick{display:flex;gap:44px;margin-top:56px}
+.tv-quick span{display:flex;align-items:center;gap:12px;font:500 var(--t-meta)/1 var(--sans);color:var(--muted)}
+.tv-quick svg{width:28px;height:28px}
 
-/* ---------- Aides télécommande ---------- */
-.tv-hints{margin-top:auto;display:flex;gap:40px;font:450 var(--t-label)/1 var(--mono);color:var(--dim)}
-.tv-hints kbd{font:inherit;color:var(--muted);padding:6px 12px;border:1px solid var(--line-2);border-radius:var(--r-xs);margin-right:12px}
+/* Aide en contexte : une seule, 4 s, puis elle disparaît (jamais d'aides permanentes) */
+.tv-hint{font:500 22px/1 var(--sans);color:var(--muted)}
+.tv-hint kbd{font:500 20px/1 var(--mono);color:var(--ink);padding:5px 10px;border:1px solid var(--line-2);border-radius:var(--r-xs);margin-right:10px}

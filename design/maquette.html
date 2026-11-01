@@ -8,96 +8,92 @@
 </head>
 <body class="tv-body">
 
-<!-- maquette.html#tv : la TV du salon, le soir -->
+<!-- Pictogrammes : trait 1,8 sur une grille de 24 (Material Symbols dans l'app) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-film" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7.5 5v14M16.5 5v14M3 9.7h4.5M3 14.3h4.5M16.5 9.7H21M16.5 14.3H21"/></symbol>
+    <symbol id="i-bulb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 18h5M10.5 21h3M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></symbol>
+    <symbol id="i-power" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.6 6.6a7.6 7.6 0 1 0 10.8 0"/></symbol>
+    <symbol id="i-speaker" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.8L13 19V5L7.8 9.5H4z"/><path d="M16.5 9a4.5 4.5 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11"/></symbol>
+    <symbol id="i-input" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h16v5l-3 3H7l-3-3V8z"/><path d="M8 11.5h8"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10a4 4 0 0 0 .4-8A6 6 0 0 0 6 11.2 3.4 3.4 0 0 0 7 18z"/><path d="M9 21l1-1.5M13 21l1-1.5"/></symbol>
+    <symbol id="i-apps" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></symbol>
+    <symbol id="i-focus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.5"/><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/></symbol>
+    <symbol id="i-keystone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 5h12l3 14H3L6 5z"/></symbol>
+    <symbol id="i-eco" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15"/><path d="M5 19l7-7"/></symbol>
+  </defs>
+</svg>
+
+<!-- maquette.html#tv : la TV du salon, le soir, focus sur « Reprendre » -->
 <section class="tv-screen" id="tv">
   <div class="tv-glows"></div>
-  <header class="tv-top">
-    <div>
-      <div class="tv-clock">21:47</div>
-      <div class="tv-date">Mercredi 22 octobre</div>
-    </div>
-    <div class="tv-status">
-      <span class="tv-chip"><span class="tv-dot"></span>Ambiance soir</span>
-      <span class="tv-chip">Son : barre de son</span>
-      <span class="tv-weather">13°<small>Averses</small></span>
-    </div>
+  <header class="tv-head">
+    <div><span class="tv-time">21:47</span><span class="tv-meta">Mercredi 22 octobre</span></div>
+    <div class="tv-weather"><svg><use href="#i-cloud"/></svg>13°<span class="tv-meta">Averses</span></div>
   </header>
 
   <div class="tv-hero-row">
-    <article class="tv-hero is-focus">
-      <div class="tv-hero-art art-1"></div>
-      <div class="tv-hero-scrim"></div>
+    <article class="tv-hero tv-focusable is-focus">
+      <div class="tv-photo" style="background-image:url(img/londres.jpg)"></div>
       <div class="tv-hero-body">
-        <div class="tv-label tv-label--em">01 · Reprendre · Netflix</div>
-        <h1 class="tv-display">Slow <em>Horses</em></h1>
+        <div class="tv-section">Reprendre · Netflix</div>
+        <h1 class="tv-hero-title">Slow Horses</h1>
         <p class="tv-meta">Saison 4 · Épisode 3 · 23 min restantes</p>
         <div class="tv-meter"><span style="--value:62%"></span></div>
-        <span class="tv-button">Reprendre</span>
       </div>
     </article>
-    <article class="tv-card">
-      <div class="tv-card-art art-2"></div>
-      <div class="tv-card-body">
-        <div class="tv-label tv-label--em">02 · Tendance · Stremio</div>
-        <h3 class="tv-h3">Severance</h3>
-        <p class="tv-meta">Série · Thriller · 2 saisons</p>
-      </div>
+    <article class="tv-poster tv-focusable">
+      <div class="tv-photo" style="background-image:url(img/bureaux.jpg)"></div>
+      <span class="tv-tag">Stremio</span>
+      <div class="tv-poster-art">Severance<small>Saison 2</small></div>
     </article>
-    <article class="tv-card">
-      <div class="tv-card-art art-3"></div>
-      <div class="tv-card-body">
-        <div class="tv-label tv-label--em">03 · Tendance · Stremio</div>
-        <h3 class="tv-h3">Dune : deuxième partie</h3>
-        <p class="tv-meta">Film · SF · 2&nbsp;h&nbsp;46</p>
-      </div>
+    <article class="tv-poster tv-focusable">
+      <div class="tv-photo" style="background-image:url(img/dunes.jpg)"></div>
+      <span class="tv-tag">Stremio</span>
+      <div class="tv-poster-art">Dune<small>Deuxième partie</small></div>
     </article>
   </div>
 
-  <div class="tv-section"><span class="tv-label">Apps</span></div>
+  <div class="tv-section tv-row-title">Apps</div>
   <div class="tv-row">
-    <div class="tv-app" style="--brand:#e50914">NETFLIX</div>
-    <div class="tv-app" style="--brand:#ffffff">YouTube</div>
-    <div class="tv-app" style="--brand:#ffffff">CANAL+</div>
-    <div class="tv-app" style="--brand:#8fb3ff">Disney+</div>
-    <div class="tv-app" style="--brand:#6fc6f2">prime video</div>
-    <div class="tv-app" style="--brand:#a98cff">Stremio</div>
-    <div class="tv-app tv-app--more">Toutes</div>
+    <div class="tv-app tv-focusable" style="--brand-bg:#000"><img src="../web/icons/netflix.svg" alt="Netflix" style="height:72px;width:auto;max-height:none"></div>
+    <div class="tv-app tv-focusable" style="--brand-bg:#0f0f0f"><img src="../web/icons/youtube.png" alt="YouTube"></div>
+    <div class="tv-app tv-focusable" style="--brand-bg:#000"><span class="tv-wordmark">CANAL+</span></div>
+    <div class="tv-app tv-focusable" style="--brand-bg:linear-gradient(135deg,#0b1b4d,#1e3f9e)"><span class="tv-wordmark" style="font-weight:600">Disney+</span></div>
+    <div class="tv-app tv-focusable" style="--brand-bg:#0f171e"><img src="../web/icons/prime.png" alt="Prime Video"></div>
+    <div class="tv-app tv-focusable" style="--brand-bg:linear-gradient(135deg,#1b1035,#3b2273);--brand-ink:#cdbfff"><span class="tv-wordmark">Stremio</span></div>
+    <div class="tv-app tv-app--fallback tv-focusable"><svg style="width:40px;height:40px;justify-self:center;color:var(--ink-2)"><use href="#i-apps"/></svg><span>Toutes les apps</span></div>
   </div>
 
-  <div class="tv-section"><span class="tv-label">Salon</span></div>
+  <div class="tv-section tv-row-title">Salon</div>
   <div class="tv-row">
-    <div class="tv-tile"><b>Cinéma</b><span>Lumières 10 %</span></div>
-    <div class="tv-tile is-on"><b>Ambiance</b><span>Active</span></div>
-    <div class="tv-tile"><b>Tout éteindre</b><span>Lumières + TV</span></div>
-    <div class="tv-tile"><b>Son</b><span>Barre de son</span></div>
-    <div class="tv-tile"><b>Entrées</b><span>HDMI 1 · HDMI 2</span></div>
+    <div class="tv-tile tv-focusable"><svg><use href="#i-film"/></svg><div><b>Cinéma</b><span>Lumières 10 %</span></div></div>
+    <div class="tv-tile tv-focusable is-on"><svg><use href="#i-bulb"/></svg><div><b>Ambiance</b><span>Allumée</span></div></div>
+    <div class="tv-tile tv-focusable"><svg><use href="#i-power"/></svg><div><b>Tout éteindre</b><span>Lumières et TV</span></div></div>
+    <div class="tv-tile tv-focusable"><svg><use href="#i-speaker"/></svg><div><b>Son</b><span>Barre de son</span></div></div>
+    <div class="tv-tile tv-focusable"><svg><use href="#i-input"/></svg><div><b>Entrées</b><span>HDMI 1 · HDMI 2</span></div></div>
   </div>
-
-  <footer class="tv-hints"><span><kbd>Flèches</kbd>naviguer</span><span><kbd>OK</kbd>ouvrir</span><span><kbd>OK long</kbd>réorganiser</span><span><kbd>⌂</kbd>revient en haut à gauche</span></footer>
 </section>
 
-<!-- maquette.html#projo : le XGIMI, noir, un seul rang -->
+<!-- maquette.html#projo : le XGIMI, noir, un seul rang d'images -->
 <section class="tv-screen" id="projo" data-device="projo">
-  <div class="tv-glows"></div>
-  <header class="tv-top tv-top--quiet">
-    <div class="tv-clock tv-clock--sm">21:47</div>
-    <span class="tv-chip">Lumières : 0 %</span>
-  </header>
+  <header class="tv-head"><span class="tv-time" style="font-size:40px;color:var(--muted)">21:47</span></header>
   <div class="tv-center">
-    <div class="tv-label">Ce soir</div>
-    <div class="tv-row tv-row--big">
-      <div class="tv-poster is-focus"><div class="tv-label tv-label--em">Reprendre</div><b>Netflix</b><span>Slow Horses · S4 É3</span></div>
-      <div class="tv-poster"><div class="tv-label">Tendance</div><b>Stremio</b><span>Severance</span></div>
-      <div class="tv-poster"><div class="tv-label">App</div><b>YouTube</b><span>Abonnements</span></div>
-      <div class="tv-poster"><div class="tv-label">App</div><b>Disney+</b><span>Récents</span></div>
-      <div class="tv-poster"><div class="tv-label">&nbsp;</div><b>Toutes</b><span>Les apps</span></div>
+    <div class="tv-section" style="margin-bottom:24px">Ce soir</div>
+    <div class="tv-row">
+      <div class="tv-frame tv-focusable is-focus"><div class="tv-thumb" style="background-image:url(img/londres-169.jpg)"></div><b>Slow Horses</b><span class="tv-warm">Reprendre · 23 min</span></div>
+      <div class="tv-frame tv-focusable"><div class="tv-thumb" style="background-image:url(img/bureaux-169.jpg)"></div><b>Severance</b><span>Stremio</span></div>
+      <div class="tv-frame tv-focusable"><div class="tv-thumb" style="background-image:url(img/dunes-169.jpg)"></div><b>Dune : deuxième partie</b><span>Stremio</span></div>
+      <div class="tv-frame tv-focusable"><div class="tv-thumb" style="background:#0f0f0f;display:grid;place-items:center"><img src="../web/icons/youtube.png" alt="" style="width:52%"></div><b>YouTube</b><span>App</span></div>
+      <div class="tv-frame tv-focusable"><div class="tv-thumb" style="background:var(--surface);display:grid;place-items:center;color:var(--ink-2)"><svg style="width:48px;height:48px"><use href="#i-apps"/></svg></div><b>Toutes les apps</b><span>12 installées</span></div>
     </div>
-    <div class="tv-row tv-row--quick">
-      <span class="tv-chip tv-chip--big">Mise au point</span><span class="tv-chip tv-chip--big">Trapèze</span>
-      <span class="tv-chip tv-chip--big">Luminosité éco</span><span class="tv-chip tv-chip--big">HDMI</span>
+    <div class="tv-quick">
+      <span><svg><use href="#i-focus"/></svg>Mise au point</span>
+      <span><svg><use href="#i-keystone"/></svg>Trapèze</span>
+      <span><svg><use href="#i-eco"/></svg>Luminosité éco</span>
+      <span><svg><use href="#i-input"/></svg>HDMI</span>
     </div>
   </div>
-  <footer class="tv-hints"><span><kbd>OK</kbd>lancer</span><span><kbd>Bas</kbd>réglages du projo</span></footer>
 </section>
 
 <script>document.getElementById(location.hash === '#projo' ? 'projo' : 'tv').classList.add('is-on-screen')</script>
