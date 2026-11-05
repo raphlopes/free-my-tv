@@ -8,6 +8,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- After the TV boots (and after a TV update), checks that Free My TV mode is still as you left it. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Maison : « Reprendre » (Watch Next des autres apps) et les apps récentes. Accordés une fois par ADB :
+         pm grant io.freemytv android.permission.READ_TV_LISTINGS ; appops set io.freemytv GET_USAGE_STATS allow -->
+    <uses-permission android:name="android.permission.READ_TV_LISTINGS" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
 
     <!-- Android 11+: without this list the app can't "see" the other apps (getLeanbackLaunchIntentForPackage
          returns null). The shelf and streaming apps, the live TV apps and, through the <intent>, every TV app
@@ -47,7 +51,7 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
-    <application
+    <application android:networkSecurityConfig="@xml/network"
         android:name=".App"
         android:label="Free My TV"
         android:icon="@drawable/icon"

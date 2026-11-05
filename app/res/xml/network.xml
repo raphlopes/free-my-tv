@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Maison : le hub parle en HTTP sur le réseau local (rangée Salon). Tout le reste reste en HTTPS seulement. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.1.33</domain>
+    </domain-config>
+</network-security-config>

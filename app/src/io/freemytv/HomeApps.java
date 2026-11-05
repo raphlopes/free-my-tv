@@ -812,7 +812,7 @@ final class HomeApps {
 
     // MARK: - Cards
 
-    private static synchronized Bitmap appTile(Context c, String key, String pkg, int brand) {
+    static synchronized Bitmap appTile(Context c, String key, String pkg, int brand) {
         String cacheKey = key != null ? key : pkg;
         if (TILES.containsKey(cacheKey)) return TILES.get(cacheKey);
         Bitmap logo = key == null ? null : ownLogo(c, key);

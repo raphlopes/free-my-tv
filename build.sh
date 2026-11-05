@@ -63,6 +63,8 @@ final class Config {
     static final boolean DISABLE_ASSISTANT = $ASSIST;
     static final boolean SHOW_CRYPTO = $CRYPTO;
     static final boolean HIDE_ANIMATION = $ANIMATION;
+    static final String HUB_URL = "$(prop hub_url '')";
+    static final String DEVICE = "$(prop device auto)";
 }
 EOF
 
