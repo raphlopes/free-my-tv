@@ -108,7 +108,8 @@ final class Maison {
                 r.meta = meta.toString();
                 r.image = cur.getString(7) != null ? cur.getString(7) : cur.getString(6);   // 16:9 d'abord
                 r.engaged = cur.getLong(10);
-                r.app = label(c, r.pkg);
+                // Un paquet qu'on ne peut pas lancer n'a pas de nom montrable (« Shell ») : pas de nom plutôt qu'un nom technique.
+                r.app = HomeApps.launchIntent(c.getPackageManager(), r.pkg) != null ? label(c, r.pkg) : null;
                 out.add(r);
             }
         } catch (SecurityException | IllegalArgumentException e) {
@@ -161,6 +162,22 @@ final class Maison {
     }
 
     // MARK: - Salon (via le hub)
+
+    private static final long SCENE_TTL = 3 * 3_600_000L;
+
+    /** Retient la scène lancée d'ici (cinema, ambiance) ; « eteindre » efface tout. */
+    static void lastScene(Context c, String action) {
+        c.getSharedPreferences("maison", Context.MODE_PRIVATE).edit()
+                .putString("scene", "eteindre".equals(action) ? null : action)
+                .putLong("sceneAt", System.currentTimeMillis()).apply();
+    }
+
+    /** L'heure de lancement si `action` est la dernière scène lancée il y a moins de 3 h, sinon 0. */
+    static long sceneAt(Context c, String action) {
+        android.content.SharedPreferences p = c.getSharedPreferences("maison", Context.MODE_PRIVATE);
+        long at = p.getLong("sceneAt", 0);
+        return action.equals(p.getString("scene", null)) && System.currentTimeMillis() - at < SCENE_TTL ? at : 0;
+    }
 
     private static final ExecutorService io = Executors.newFixedThreadPool(2);
     private static final Handler main = new Handler(Looper.getMainLooper());

@@ -7,6 +7,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LightingColorFilter;
 import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
@@ -70,6 +71,13 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         String note;
         boolean noteOk;
     }
+
+    /** Hors de la rangée Apps (ils restent dans « Toutes les apps ») : réglages et boutiques, la place va aux apps qu'on regarde. */
+    private static final Set<String> OFF_ROW = new HashSet<>(java.util.Arrays.asList(
+            "com.android.tv.settings", "com.android.vending", "com.google.android.play.games"));
+    /** Et sur le projo, la TV en direct (pas d'antenne). */
+    private static final Set<String> OFF_PROJO = new HashSet<>(java.util.Arrays.asList(HomeApps.LIVE_TV_APPS));
+    static { OFF_PROJO.add("com.android.tv"); }   // la TV en direct d'Android (AOSP), absente de LIVE_TV_APPS
 
     private final Activity activity;
     private final HomeData data;
@@ -225,6 +233,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             List<HomeApps.Item> row = new ArrayList<>();
             for (String pkg : order) {
                 if (row.size() >= 6) break;
+                if (OFF_ROW.contains(pkg) || (projo && OFF_PROJO.contains(pkg))) continue;
                 for (HomeApps.Item it : all) if (it.pkg.equals(pkg)) row.add(it);
             }
             List<HomeApps.Item> ins = HomeApps.allInputs(c);
@@ -248,11 +257,17 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
 
     private void rebuild() {
         Cell was = focused();
+        java.util.Map<String, Cell> old = new java.util.HashMap<>();
+        for (List<Cell> r : rows) for (Cell c : r) old.put(key(c), c);
         String wasKey = key(was);
         rows.clear();
         rowTitles.clear();
         List<Recs.Pick> picks = recs.now();
         if (projo) buildProjo(picks); else buildTv(picks);
+        for (List<Cell> r : rows) for (Cell c : r) {   // un retour en cours (« Lancé ») survit à la reconstruction
+            Cell o = old.get(key(c));
+            if (o != null) { c.note = o.note; c.noteOk = o.noteOk; c.noteUntil = o.noteUntil; }
+        }
         // Garde le focus sur le même élément si possible, sinon sur la même rangée.
         row = Math.min(row, Math.max(0, rows.size() - 1));
         for (int r = 0; r < rows.size() && wasKey != null; r++)
@@ -298,7 +313,10 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             addRow(null, hero);
             y += 420 + 40;
         } else {
-            y += 40;
+            // Rien à reprendre ni à suggérer (le cas courant) : Apps et Salon au milieu de la zone utile, pas collés en haut.
+            boolean salonRow = Maison.hasHub() || Sound.out() != null || !inputs.isEmpty();
+            float block = 26 + 30 + 123 + (salonRow ? 40 + 26 + 30 + 110 : 0);
+            y += Math.max(40, (H - SAFE_Y - y - block) / 2);
         }
         // Apps : 6 + « Toutes les apps »
         List<Cell> appRow = new ArrayList<>();
@@ -345,6 +363,12 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     private float salonCell(List<Cell> row, float x, float y, String action, String title, String sub, String icon) {
         Cell c = tileCell(C_SALON, x, y, title, sub, icon);
         c.action = action;
+        // La dernière scène lancée d'ici garde le point cantaloup, avec son heure : on ne connaît pas l'état réel des lampes.
+        long at = Maison.sceneAt(activity, action);
+        if (at > 0) {
+            c.warm = true;
+            c.sub = "Lancée à " + Ui.clock(at);
+        }
         row.add(c);
         return x + 320 + GAP;
     }
@@ -566,7 +590,11 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 break;
             case C_SALON:
                 note(c, "…", true);
-                Maison.salon(c.action, ok -> note(c, ok ? "Lancé" : "Hub injoignable", ok));
+                Maison.salon(c.action, ok -> {
+                    if (ok) Maison.lastScene(activity, c.action);
+                    note(c, ok ? "Lancé" : "Hub injoignable", ok);
+                    rebuild();
+                });
                 break;
             default:
                 break;
@@ -751,13 +779,13 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         switch (cell.kind) {
             case C_RESUME:
             case C_PICK:
-                if (cell.frame) drawFrame(c, cell, r); else if (cell.hero) drawHero(c, cell, r); else drawPoster(c, cell, r);
+                if (cell.frame) drawFrame(c, cell, r, f); else if (cell.hero) drawHero(c, cell, r); else drawPoster(c, cell, r);
                 break;
             case C_APP:
-                if (cell.frame) drawFrame(c, cell, r); else drawApp(c, cell.item, r, cell.radius);
+                if (cell.frame) drawFrame(c, cell, r, f); else drawApp(c, cell.item, r, cell.radius, f);
                 break;
             case C_ALL:
-                if (cell.frame) drawFrame(c, cell, r); else drawAll(c, r, cell.radius);
+                if (cell.frame) drawFrame(c, cell, r, f); else drawAll(c, r, cell.radius);
                 break;
             case C_SETTINGS:
             case C_INPUTS:
@@ -847,7 +875,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         c.drawText(ellipsize(title, heroTitle, 620), x - Ui.leftBearing(heroTitle, title), bottom, heroTitle);
         bottom -= Ui.cap(heroTitle) + 26;
         section.setColor(resume ? WARM : muted);
-        String label = resume ? "Reprendre · " + cell.resume.app : "À voir · " + (cell.pick.app == null ? "" : Recs.serviceName(cell.pick));
+        String label = resume ? "Reprendre" + (cell.resume.app != null ? " · " + cell.resume.app : "") : "À voir · " + (cell.pick.app == null ? "" : Recs.serviceName(cell.pick));
         c.drawText(label.toUpperCase(java.util.Locale.ROOT), x, bottom, section);
     }
 
@@ -877,9 +905,14 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         tile.setColor(ink);
     }
 
-    private void drawApp(Canvas c, HomeApps.Item it, RectF r, float radius) {
+    private void drawApp(Canvas c, HomeApps.Item it, RectF r, float radius, float f) {
         if (it.tile != null) {
+            // Les bannières blanches écrasent le reste (et éblouissent sur le projo) : atténuées hors focus.
+            float rest = projo ? 0.70f : 0.85f, g = rest + (1 - rest) * f;
+            int v = Math.round(255 * g);
+            if (v < 255) image.setColorFilter(new LightingColorFilter(Color.rgb(v, v, v), 0));
             cover(c, it.tile, r, radius);
+            image.setColorFilter(null);
         } else {
             fill.setColor(SURFACE_2);
             c.drawRoundRect(r, radius, radius, fill);
@@ -902,7 +935,8 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
 
     private void drawTile(Canvas c, Cell cell, RectF r) {
         boolean noting = cell.noteUntil > SystemClock.uptimeMillis();
-        boolean on = cell.warm || (noting && cell.noteOk && !"…".equals(cell.note));
+        boolean on = cell.warm && !noting;   // cantaloup = allumé, jamais pour dire « c'est fait »
+        boolean done = noting && cell.noteOk && !"…".equals(cell.note);
         fill.setColor(SURFACE);
         c.drawRoundRect(r, cell.radius, cell.radius, fill);
         if (on) {
@@ -926,8 +960,11 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             tmp2.set(sx, top + block - 10 * s - 3 * s, sx + 10 * s, top + block - 3 * s);
             c.drawRoundRect(tmp2, 2 * s, 2 * s, fill);
             sx += 20 * s;
+        } else if (done) {
+            drawIcon(c, "check", sx + 10 * s, top + block - Ui.cap(meta) / 2, 24 * s, ink);
+            sx += 28 * s;
         }
-        meta.setColor(on ? WARM : muted);
+        meta.setColor(on ? WARM : done ? ink : muted);
         if (sub != null) c.drawText(ellipsize(sub, meta, r.right - sx - 20 * s), sx, top + block, meta);
         tile.setTextSize(28);
         meta.setTextSize(24);
@@ -952,8 +989,8 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         }
     }
 
-    private void drawFrame(Canvas c, Cell cell, RectF r) {
-        if (cell.kind == C_APP) drawApp(c, cell.item, r, cell.radius);
+    private void drawFrame(Canvas c, Cell cell, RectF r, float f) {
+        if (cell.kind == C_APP) drawApp(c, cell.item, r, cell.radius, f);
         else if (cell.kind == C_ALL) {
             fill.setColor(SURFACE);
             c.drawRoundRect(r, cell.radius, cell.radius, fill);
@@ -961,7 +998,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         } else cover(c, imageOf(cell, true), r, cell.radius);
         // Légende sous l'image, une ligne chacune.
         String title = cell.kind == C_APP ? cell.item.label : cell.title;
-        String sub = cell.kind == C_APP ? "App" : cell.kind == C_ALL ? cell.sub
+        String sub = cell.kind == C_APP ? null : cell.kind == C_ALL ? cell.sub
                 : cell.resume != null ? "Reprendre" + (cell.resume.progress > 0 && cell.sub != null && cell.sub.contains("min") ? " · " + cell.sub.substring(cell.sub.lastIndexOf("· ") + 2).replace(" restantes", "") : "")
                 : Recs.serviceName(cell.pick);
         float base = cell.r.bottom + 22 + Ui.cap(frameTitle);
@@ -1008,7 +1045,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         drawCell(c, cell);
         meta.setColor(cell.f > 0.5f ? ink : muted);
         meta.setTextSize(22);
-        c.drawText(ellipsize(cell.item.label, meta, 219), cell.r.left, cell.r.bottom + 28 + 26, meta);   // sous le focus (28 px)
+        c.drawText(ellipsize(cell.item.label, meta, 219), cell.r.left, cell.r.bottom + 28 + 34, meta);   // sous le focus (28 px), avec de l'air
         meta.setTextSize(24);
     }
 
@@ -1076,6 +1113,12 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 path.close();
                 c.drawPath(path, stroke);
                 c.drawLine(8, 11.5f, 16, 11.5f, stroke);
+                break;
+            case "check":
+                path.moveTo(5, 12.5f);
+                path.lineTo(9.5f, 17);
+                path.lineTo(19, 7);
+                c.drawPath(path, stroke);
                 break;
             case "apps":
                 for (float[] p : new float[][] {{4, 4}, {14, 4}, {4, 14}, {14, 14}}) {
