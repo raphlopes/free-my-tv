@@ -32,7 +32,7 @@ import java.util.Set;
 /**
  * L'accueil maison : le design system de design/ (tokens.css, components.css, maquette.html) dessiné en Canvas.
  * TV : en-tête, héros (Reprendre, sinon une suggestion) et deux affiches, Apps (les récentes d'abord), Salon (hub).
- * Projo : l'heure, une rangée d'images 16:9 avec légende, puis les raccourcis (réglages du projecteur, entrées).
+ * Projo : l'en-tête (heure, date, météo), une rangée d'images 16:9 avec légende, puis les raccourcis (réglages du projecteur, entrées).
  * Toutes les mesures sont en px de la maquette 1920×1080 ; le canevas est mis à l'échelle de l'écran.
  * Pas de flou, pas de saveLayer, pas de clipPath ; on ne redessine que pendant une animation ou un changement.
  */
@@ -973,11 +973,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     // MARK: - Projo
 
     private void drawProjo(Canvas c) {
-        time.setTextSize(40);
-        time.setColor(muted);
-        c.drawText(Ui.clock(System.currentTimeMillis()), SAFE_X, SAFE_Y + 28 + Ui.cap(time) / 2, time);
-        time.setTextSize(48);
-        time.setColor(ink);
+        drawHeader(c);
         for (int r = 0; r < rows.size(); r++) {
             List<Cell> cells = rows.get(r);
             String title = rowTitles.get(r);

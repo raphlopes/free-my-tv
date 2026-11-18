@@ -55,6 +55,60 @@ final class Maison {
                 || Build.BRAND.toLowerCase(java.util.Locale.ROOT).contains("xgimi");
     }
 
+    // MARK: - Accueil Google (projo)
+
+    /**
+     * Sur le projo, l'accueil Google se déclare HOME en priorité 2 et passe devant le nôtre (0, plafond des applis
+     * installées) : il doit rester désactivé. Or xrmservice (XGIMI) le réactive à chaque touche YouTube/Netflix de la
+     * télécommande. Tant que nous sommes l'accueil, on le redésactive par l'ADB local (Adb, accepté une fois à l'écran).
+     * Pas sur la TV : launcherx y reste actif.
+     */
+    static final String GOOGLE_HOME = "com.google.android.apps.tv.launcherx";
+    private static final java.util.concurrent.atomic.AtomicBoolean disabling = new java.util.concurrent.atomic.AtomicBoolean();
+    private static boolean watching;
+
+    /** Depuis l'accueil : surveille les réactivations (une fois par processus) et vérifie tout de suite. */
+    static synchronized void watchGoogleHome(Context c) {
+        if (!projo()) return;
+        if (!watching) {
+            watching = true;
+            android.content.IntentFilter f = new android.content.IntentFilter(android.content.Intent.ACTION_PACKAGE_CHANGED);
+            f.addDataScheme("package");
+            f.addDataSchemeSpecificPart(GOOGLE_HOME, android.os.PatternMatcher.PATTERN_LITERAL);
+            c.getApplicationContext().registerReceiver(new android.content.BroadcastReceiver() {
+                @Override public void onReceive(Context context, android.content.Intent intent) { keepGoogleHomeOff(context); }
+            }, f);
+        }
+        keepGoogleHomeOff(c);
+    }
+
+    static void keepGoogleHomeOff(Context c) {
+        if (!projo() || Build.VERSION.SDK_INT < 29) return;
+        final Context app = c.getApplicationContext();
+        android.app.role.RoleManager roles = app.getSystemService(android.app.role.RoleManager.class);
+        if (roles == null || !roles.isRoleHeld(android.app.role.RoleManager.ROLE_HOME) || !enabled(app, GOOGLE_HOME)) return;
+        if (!disabling.compareAndSet(false, true)) return;
+        new Thread(() -> {
+            try (Adb adb = Adb.connect(app, 60_000, null)) {
+                AppLog.w("accueil Google réactivé, désactivé à nouveau : " + adb.shell("pm disable-user --user 0 " + GOOGLE_HOME).trim());
+            } catch (IOException e) {
+                AppLog.w("accueil Google : " + e.getMessage());
+            } finally {
+                disabling.set(false);
+            }
+        }, "accueil-google").start();
+    }
+
+    private static boolean enabled(Context c, String pkg) {
+        try {
+            int s = c.getPackageManager().getApplicationEnabledSetting(pkg);
+            return s == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
+                    || s == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
+        } catch (IllegalArgumentException e) {
+            return false;   // absent (ou invisible)
+        }
+    }
+
     // MARK: - Reprendre
 
     private static final String[] COLS = {

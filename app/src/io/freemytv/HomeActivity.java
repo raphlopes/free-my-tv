@@ -48,6 +48,7 @@ public class HomeActivity extends Activity {
             return;
         }
         if (home != null) home.resume();
+        Maison.watchGoogleHome(this);   // projo : xrmservice réactive l'accueil Google
     }
 
     @Override protected void onPause() {
