@@ -32,7 +32,7 @@ import java.util.Set;
 /**
  * L'accueil maison : le design system de design/ (tokens.css, components.css, maquette.html) dessiné en Canvas.
  * TV : en-tête, héros (Reprendre, sinon une suggestion) et deux affiches, Apps (les récentes d'abord), Salon (hub).
- * Projo : l'en-tête (heure, date, météo), une rangée d'images 16:9 avec légende, puis les raccourcis (réglages du projecteur, entrées).
+ * Projo : l'en-tête (heure, date, météo), « Ce soir » et « Apps » en images 16:9 avec légende, puis les raccourcis (réglages du projecteur, entrées).
  * Toutes les mesures sont en px de la maquette 1920×1080 ; le canevas est mis à l'échelle de l'écran.
  * Pas de flou, pas de saveLayer, pas de clipPath ; on ne redessine que pendant une animation ou un changement.
  */
@@ -396,31 +396,33 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     }
 
     private void buildProjo(List<Recs.Pick> picks) {
-        // Une rangée de 5 au plus, centrée verticalement avec les raccourcis.
-        List<Cell> frames = new ArrayList<>();
-        for (Maison.Resume r : resumes) if (frames.size() < 2) frames.add(resumeCell(r));
-        for (Recs.Pick p : picks) if (frames.size() < 3) frames.add(pickCell(p));
+        // « Ce soir » (reprises puis suggestions) et « Apps » (récentes d'abord), 5 au plus chacune, puis les raccourcis.
+        List<Cell> tonight = new ArrayList<>();
+        for (Maison.Resume r : resumes) if (tonight.size() < 3) tonight.add(resumeCell(r));
+        for (Recs.Pick p : picks) if (tonight.size() < 5) tonight.add(pickCell(p));
+        List<Cell> appCells = new ArrayList<>();
         for (HomeApps.Item it : apps) {
-            if (frames.size() >= 4) break;
+            if (appCells.size() >= 4) break;
             Cell c = new Cell();
             c.kind = C_APP;
             c.item = it;
-            frames.add(c);
+            appCells.add(c);
         }
         Cell all = new Cell();
         all.kind = C_ALL;
         all.title = "Toutes les apps";
         all.sub = allApps.size() + " installées";
-        frames.add(all);
-        float top = 1080 / 2f - 200;
-        float x = SAFE_X;
-        for (Cell c : frames) {
-            c.frame = true;
-            c.radius = 12;
-            c.r.set(x, top, x + 320, top + 180);
-            x += 320 + GAP;
+        appCells.add(all);
+        // Une seule rangée : centrée ; deux : la première remonte sous l'en-tête, 360 px de l'une à l'autre.
+        float top = tonight.isEmpty() ? 1080 / 2f - 200 : 220;
+        if (!tonight.isEmpty()) {
+            frameRow(tonight, top);
+            addRow("Ce soir", tonight);
+            top += 360;
         }
-        addRow("Ce soir", frames);
+        frameRow(appCells, top);
+        addRow("Apps", appCells);
+        float x;
         List<Cell> quick = new ArrayList<>();
         float qy = top + 180 + 22 + 40 + 6 + 30 + 56;
         x = SAFE_X;
@@ -429,6 +431,16 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         x = quick.get(0).r.right + 44;
         if (!inputs.isEmpty()) quick.add(quickCell(C_INPUTS, x, qy, "Entrées", "input"));
         addRow(null, quick);
+    }
+
+    private static void frameRow(List<Cell> cells, float top) {
+        float x = SAFE_X;
+        for (Cell c : cells) {
+            c.frame = true;
+            c.radius = 12;
+            c.r.set(x, top, x + 320, top + 180);
+            x += 320 + GAP;
+        }
     }
 
     private Cell quickCell(int kind, float x, float y, String title, String icon) {
