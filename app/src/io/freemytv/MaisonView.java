@@ -959,7 +959,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     }
 
     private static String pickUri(Recs.Pick p, boolean wide) {
-        return p.backdrop == null ? null : "https://image.tmdb.org/t/p/" + (wide ? "w1280" : "w780") + p.backdrop;
+        return p.backdrop == null ? null : "https://image.tmdb.org/t/p/" + (wide ? "w1280" : "w300") + p.backdrop;
     }
 
     private Bitmap imageOf(Cell cell, boolean wide) {
