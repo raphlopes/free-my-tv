@@ -87,6 +87,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     private final List<String> rowTitles = new ArrayList<>();
     private int row, col;
     private boolean running;
+    private String movingApp;  // dock : l'app qu'on déplace (appui long sur OK, puis Gauche/Droite, OK pour poser)
     private Cell removing;     // carte Reprendre en attente de confirmation (appui long sur OK)
     private boolean okDown;    // OK enfoncé sur une carte Reprendre : on n'ouvre qu'au relâchement, si ce n'était pas un appui long
     private boolean touched;   // faux tant que personne n'a bougé : le focus suit alors le premier élément (Reprendre)
@@ -152,6 +153,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         weather.setLetterSpacing(-0.03f);
         stroke.setStyle(Paint.Style.STROKE);
         panel = new PanelView(a, this::invalidate);
+        a.getApplicationContext().registerReceiver(unhide, new android.content.IntentFilter(PanelView.UNHIDE));
         headCell.kind = C_CONTROL;
         headCell.radius = 28;
         headCell.r.set(W - SAFE_X - 56, SAFE_Y, W - SAFE_X, SAFE_Y + 56);
@@ -206,8 +208,16 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         recs.removeListener(this);
     }
 
+    private final android.content.BroadcastReceiver unhide = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) {   // « Titres retirés » du panneau
+            Maison.unhideAll(c);
+            if (running) load();
+        }
+    };
+
     void destroy() {
         pause();
+        activity.getApplicationContext().unregisterReceiver(unhide);
     }
 
     /** Accueil pressé sur l'accueil : retour au début, écran des apps fermé. */
@@ -231,7 +241,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         int gen = ++loadGeneration;
         Context c = activity.getApplicationContext();
         new Thread(() -> {
-            List<Maison.Resume> res = Maison.resume(c, 6);
+            List<Maison.Resume> res = Maison.resume(c, 6, () -> { if (running) load(); });
             Set<String> launchable = new HashSet<>();
             List<HomeApps.Item> all = new ArrayList<>();
             for (String[] app : HomeApps.launchable(c)) {
@@ -246,7 +256,11 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             List<String> order = new ArrayList<>(Maison.recent(c, launchable, 6));
             for (String pkg : HomeApps.shelfPackages(c)) if (!order.contains(pkg) && launchable.contains(pkg)) order.add(pkg);
             for (HomeApps.Item it : all) if (!order.contains(it.pkg)) order.add(it.pkg);
-            if (order.remove(Maison.STREMIO)) order.add(0, Maison.STREMIO);   // l'app de tous les soirs : toujours la première
+            List<String> pinned = Maison.dock(c);
+            if (pinned != null) {   // dock choisi à la main : son ordre, puis le reste
+                order.removeAll(pinned);
+                order.addAll(0, pinned);
+            } else if (order.remove(Maison.STREMIO)) order.add(0, Maison.STREMIO);   // sinon l'app de tous les soirs en premier
             List<HomeApps.Item> row = new ArrayList<>();
             for (String pkg : order) {
                 if (row.size() >= 6) break;
@@ -452,6 +466,12 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         shelf = null;
     }
 
+    private void saveDock() {
+        List<String> pkgs = new ArrayList<>();
+        for (HomeApps.Item it : apps) if (pkgs.size() < 5) pkgs.add(it.pkg);
+        Maison.saveDock(activity, pkgs);
+    }
+
     PanelView panel() {
         return panel;
     }
@@ -504,8 +524,25 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         }
         if (e.getAction() != KeyEvent.ACTION_DOWN) return isOurs(e.getKeyCode());
         boolean held = e.getRepeatCount() > 0;
+        if (movingApp != null) {
+            int i = -1, n = Math.min(5, apps.size());
+            for (int j = 0; j < n; j++) if (apps.get(j).pkg.equals(movingApp)) i = j;
+            boolean side = e.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT || e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT;
+            int to = e.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT ? i - 1 : i + 1;
+            if (side) {
+                if (i >= 0 && to >= 0 && to < n) {
+                    java.util.Collections.swap(apps, i, to);
+                    rebuild();
+                }
+            } else if (!held && isOurs(e.getKeyCode())) {   // toute autre touche pose
+                movingApp = null;
+                saveDock();
+                invalidate();
+            }
+            return true;
+        }
         Cell at = focused();
-        if (ok && at != null && at.kind == C_RESUME) {
+        if (ok && at != null && (at.kind == C_RESUME || (projo && at.kind == C_APP && at.item.kind == HomeApps.APP))) {
             if (!held && removing == at) {   // confirmation
                 Maison.hide(activity, at.resume);
                 resumes.remove(at.resume);
@@ -515,7 +552,16 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 okDown = true;
             } else if (okDown && e.isLongPress()) {
                 okDown = false;
-                removing = at;
+                if (at.kind == C_RESUME) removing = at;
+                else if (!sheet) movingApp = at.item.pkg;
+                else {   // « Toutes les apps » : épingle en tête du dock
+                    apps.remove(at.item);
+                    apps.add(0, at.item);
+                    saveDock();
+                    sheet = false;
+                    rebuild();
+                    load();
+                }
                 invalidate();
             }
             return true;
@@ -619,6 +665,15 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 if (!HomeApps.open(activity, c.item, this, x, y, w, h)) note(c, "Impossible d'ouvrir", false);
                 break;
             case C_PICK:
+                if (HomeApps.launchIntent(activity.getPackageManager(), Maison.STREMIO) != null) {
+                    try {   // Stremio a tout : sa recherche sur le titre, plutôt que l'appli du service
+                        activity.startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("stremio:///search?search="
+                                + android.net.Uri.encode(c.pick.title))).setPackage(Maison.STREMIO).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                        break;
+                    } catch (RuntimeException e) {
+                        AppLog.w("suggestion : " + e.getMessage());
+                    }
+                }
                 if (c.pick.pkg == null || !HomeApps.open(activity, HomeApps.app(c.pick.pkg, Recs.serviceName(c.pick), c.pick.link), this, x, y, w, h))
                     note(c, "Impossible d'ouvrir", false);
                 break;
@@ -1152,8 +1207,9 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             for (Cell cell : cells) {   // dock : le nom de l'app focalisée sous sa tuile, en fondu croisé
                 if (cell.frame || cell.kind != C_APP || cell.f <= 0) continue;
                 meta.setTextSize(22);
-                meta.setColor(Ui.alpha(ink, cell.f * cell.f));
-                c.drawText(ellipsize(cell.item.label, meta, DOCK_W), cell.r.left, cell.r.bottom + 38, meta);
+                boolean move = cell.item.pkg.equals(movingApp);
+                meta.setColor(move ? WARM : Ui.alpha(ink, cell.f * cell.f));
+                c.drawText(move ? "‹  Déplacer  ›" : ellipsize(cell.item.label, meta, DOCK_W), cell.r.left, cell.r.bottom + 38, meta);
                 meta.setTextSize(24);
             }
         }
@@ -1314,6 +1370,22 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 path.arcTo(tmp2, 15, 240, true);
                 path.quadTo(10.5f, 13.5f, 19.23f, 14.57f);
                 path.close();
+                c.drawPath(path, stroke);
+                break;
+            case "timer":
+                c.drawCircle(12, 13.5f, 7.5f, stroke);
+                c.drawLine(12, 13.5f, 12, 9.5f, stroke);
+                c.drawLine(9.5f, 3, 14.5f, 3, stroke);
+                break;
+            case "undo":
+                path.moveTo(8.5f, 5.5f);
+                path.lineTo(4, 10);
+                path.lineTo(8.5f, 14.5f);
+                path.moveTo(4, 10);
+                path.lineTo(15, 10);
+                tmp2.set(10.5f, 10, 19.5f, 19);
+                path.arcTo(tmp2, -90, 180, false);
+                path.lineTo(10, 19);
                 c.drawPath(path, stroke);
                 break;
             case "sliders":

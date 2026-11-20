@@ -27,7 +27,8 @@ final class PanelView extends View {
     static final float W = 600, MARGIN = 96, TOP = 54 + 56 + 20;
     private static final float PAD = 28;
     private static final int BG = 0xFF0A161D, INK = 0xFFDFE7EC, INK2 = 0xCCDFE7EC, MUTED = 0xFF9AABB8, WARM = 0xFFFC734D;
-    private static final int VOLUME = 0, SLEEP = 1, SETTINGS = 2, BLUETOOTH = 3, NETWORK = 4, INPUT = 5;
+    private static final int VOLUME = 0, SLEEP = 1, SETTINGS = 2, BLUETOOTH = 3, NETWORK = 4, INPUT = 5, TIMER = 6, RESTORE = 7;
+    private static final int[] TIMER_STEPS = {0, 30, 60, 120};   // minutes
 
     private static final class Cell {
         int kind;
@@ -87,6 +88,9 @@ final class PanelView extends View {
         y += 132 + 16;
         cell(BLUETOOTH, "Bluetooth", "bluetooth", x0, y, x0 + half, y + 132);
         cell(NETWORK, "Réseau", "wifi", x1 - half, y, x1, y + 132);
+        y += 132 + 16;
+        cell(TIMER, timerTitle(), "timer", x0, y, x0 + half, y + 132);
+        cell(RESTORE, "Titres retirés", "undo", x1 - half, y, x1, y + 132);
         y += 132;
         boolean any = false;
         for (HomeApps.Item it : HomeApps.allInputs(getContext())) {
@@ -191,13 +195,27 @@ final class PanelView extends View {
         Context app = getContext().getApplicationContext();
         switch (c.kind) {
             case SLEEP:
-                new Thread(() -> {   // la touche Veille, par l'ADB local (une appli n'a pas le droit de l'envoyer)
-                    try (Adb adb = Adb.connect(app, 5_000, null)) {
-                        adb.shell("input keyevent 223");
-                    } catch (java.io.IOException e) {
-                        AppLog.w("veille : " + e.getMessage());
-                    }
-                }, "veille").start();
+                Maison.sleep(app, null);
+                break;
+            case TIMER: {   // OK fait défiler : non, 30 min, 1 h, 2 h
+                android.content.SharedPreferences p = timerPrefs();
+                int step = 0;
+                for (int i = 0; i < TIMER_STEPS.length; i++) if (TIMER_STEPS[i] == p.getInt("minutes", 0) && timerAt() > 0) step = i;
+                int minutes = TIMER_STEPS[(step + 1) % TIMER_STEPS.length];
+                long at = minutes == 0 ? 0 : System.currentTimeMillis() + minutes * 60_000L;
+                android.app.AlarmManager am = (android.app.AlarmManager) app.getSystemService(Context.ALARM_SERVICE);
+                android.app.PendingIntent pi = android.app.PendingIntent.getBroadcast(app, 1,
+                        new Intent(app, HomeReceiver.class).setAction(HomeReceiver.SLEEP),
+                        android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
+                if (at == 0) am.cancel(pi);
+                else am.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, at, pi);
+                p.edit().putLong("at", at).putInt("minutes", minutes).commit();
+                c.title = timerTitle();
+                invalidate();
+                return;
+            }
+            case RESTORE:   // l'accueil (autre processus) tient la liste : on le lui demande
+                app.sendBroadcast(new Intent(UNHIDE).setPackage(app.getPackageName()));
                 break;
             case SETTINGS:
                 start(new Intent(Settings.ACTION_SETTINGS));
@@ -230,12 +248,46 @@ final class PanelView extends View {
         }
     }
 
+    static final String UNHIDE = "io.freemytv.UNHIDE";
+
+    // Le panneau vit dans deux processus (accueil, service de touches) : un fichier relu à chaque ouverture.
+    @SuppressWarnings("deprecation")
+    private android.content.SharedPreferences timerPrefs() {
+        return getContext().getSharedPreferences("minuterie", Context.MODE_MULTI_PROCESS);
+    }
+
+    private long timerAt() {
+        long at = timerPrefs().getLong("at", 0);
+        return at > System.currentTimeMillis() ? at : 0;
+    }
+
+    private String timerTitle() {
+        long at = timerAt();
+        return at == 0 ? "Minuterie" : "Veille à " + Ui.clock(at);
+    }
+
+    private final android.content.BroadcastReceiver volumeChanged = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) {   // réglé à la télécommande pendant que le panneau est ouvert
+            readVolume();
+            invalidate();
+        }
+    };
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        getContext().registerReceiver(volumeChanged, new android.content.IntentFilter("android.media.VOLUME_CHANGED_ACTION"));
+    }
+
+    @Override protected void onDetachedFromWindow() {
+        getContext().unregisterReceiver(volumeChanged);
+        super.onDetachedFromWindow();
+    }
+
     private AudioManager audio() {
         return (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
     }
 
-    // shortcut: lu à l'ouverture et à chaque réglage d'ici (deux appels système, trop chers à chaque image) ; le volume
-    // changé à la télécommande pendant que le panneau est ouvert ne bouge pas la barre. À écouter (VOLUME_CHANGED_ACTION) si ça gêne.
+    // Lu à l'ouverture et à chaque changement (deux appels système, trop chers à chaque image).
     private void readVolume() {
         AudioManager am = audio();
         int max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);

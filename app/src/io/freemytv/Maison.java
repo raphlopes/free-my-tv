@@ -145,8 +145,36 @@ final class Maison {
         c.getSharedPreferences("maison", Context.MODE_PRIVATE).edit().putStringSet("hidden", all).apply();
     }
 
+    static void unhideAll(Context c) {
+        c.getSharedPreferences("maison", Context.MODE_PRIVATE).edit().remove("hidden").apply();
+    }
+
+    /** Le dock choisi à la main (paquets, dans l'ordre), ou null : les apps récentes. */
+    static List<String> dock(Context c) {
+        String v = c.getSharedPreferences("maison", Context.MODE_PRIVATE).getString("dock", null);
+        return v == null ? null : new ArrayList<>(java.util.Arrays.asList(v.split("\n")));
+    }
+
+    static void saveDock(Context c, List<String> pkgs) {
+        c.getSharedPreferences("maison", Context.MODE_PRIVATE).edit().putString("dock", String.join("\n", pkgs)).apply();
+    }
+
+    /** La touche Veille, par l'ADB local (une appli n'a pas le droit de l'envoyer). `done` : sur le fil de l'envoi. */
+    static void sleep(Context c, Runnable done) {
+        Context app = c.getApplicationContext();
+        new Thread(() -> {
+            try (Adb adb = Adb.connect(app, 5_000, null)) {
+                adb.shell("input keyevent 223");
+            } catch (IOException e) {
+                AppLog.w("veille : " + e.getMessage());
+            } finally {
+                if (done != null) done.run();
+            }
+        }, "veille").start();
+    }
+
     /** La file « Reprendre », la plus récente d'abord. Vide sans READ_TV_LISTINGS (on ne voit alors que nos lignes). */
-    static List<Resume> resume(Context c, int max) {
+    static List<Resume> resume(Context c, int max, Runnable changed) {
         List<Resume> out = new ArrayList<>();
         Set<String> seen = new HashSet<>(), hidden = hidden(c);
         try (Cursor cur = c.getContentResolver().query(TvContract.WatchNextPrograms.CONTENT_URI, COLS, null, null,
@@ -182,7 +210,7 @@ final class Maison {
             AppLog.w("reprendre : " + e.getMessage());
         }
         // Stremio par son API quand la clé est là : ses lignes Watch Next (s'il en publie) font alors doublon.
-        List<Resume> st = stremio();
+        List<Resume> st = stremio(changed);
         if (!st.isEmpty()) {
             Set<String> titles = new HashSet<>();
             for (Resume r : st) titles.add(r.title.toLowerCase(java.util.Locale.ROOT));
@@ -212,21 +240,49 @@ final class Maison {
     private static List<Resume> stremioCache = Collections.emptyList();
     private static long stremioAt;
 
+    private static boolean stremioBusy;
+    /** Les épisodes d'une série (Cinemeta), gardés six heures : {heure, liste}. */
+    private static final Map<String, Object[]> EPISODES = Collections.synchronizedMap(new HashMap<>());
+
     /**
      * Le « Continuer » de Stremio, lu dans sa bibliothèque (api.strem.io, clé de session de config.properties) : les
-     * titres entamés, et pour une série dont le dernier épisode est fini (moins de 3 semaines), l'épisode suivant déjà
-     * sorti (Cinemeta). La tuile ouvre Stremio sur l'épisode. Réseau : jamais sur le fil principal. Gardé une minute.
+     * titres entamés ; pour une série dont le dernier épisode est fini, le suivant s'il est sorti (« à suivre » pendant
+     * trois semaines, puis seulement un épisode sorti depuis moins de quinze jours : « nouvel épisode »). La tuile ouvre
+     * Stremio sur l'épisode. Ne bloque jamais : rend la liste connue et la rafraîchit en fond (au plus une fois par
+     * minute) ; `changed` est appelé sur le fil principal si elle a changé.
      */
-    static synchronized List<Resume> stremio() {
+    static synchronized List<Resume> stremio(Runnable changed) {
         String key = Config.STREMIO_AUTH.trim();
         long now = System.currentTimeMillis();
-        if (key.isEmpty() || now - stremioAt < 60_000) return stremioCache;
-        stremioAt = now;
+        if (key.isEmpty() || stremioBusy || now - stremioAt < 60_000) return stremioCache;
+        stremioBusy = true;
+        io.execute(() -> {
+            List<Resume> fresh = stremioFetch(key);
+            synchronized (Maison.class) {
+                stremioBusy = false;
+                stremioAt = System.currentTimeMillis();
+                if (fresh == null || signature(fresh).equals(signature(stremioCache))) return;
+                stremioCache = fresh;
+            }
+            if (changed != null) main.post(changed);
+        });
+        return stremioCache;
+    }
+
+    private static String signature(List<Resume> list) {
+        StringBuilder sb = new StringBuilder();
+        for (Resume r : list) sb.append(r.intentUri).append('|').append(r.meta).append('\n');
+        return sb.toString();
+    }
+
+    /** null : clé périmée ou pas de réseau (on garde la liste d'avant). */
+    private static List<Resume> stremioFetch(String key) {
         List<Resume> out = new ArrayList<>();
+        long now = System.currentTimeMillis();
         try {
             org.json.JSONArray items = post("https://api.strem.io/api/datastoreGet", new org.json.JSONObject()
                     .put("authKey", key).put("collection", "libraryItem").put("all", true)).getJSONArray("result");
-            List<org.json.JSONObject> cand = new ArrayList<>();
+            List<org.json.JSONObject> cand = new ArrayList<>(), older = new ArrayList<>();
             for (int i = 0; i < items.length(); i++) {
                 org.json.JSONObject it = items.getJSONObject(i), st = it.optJSONObject("state");
                 String type = it.optString("type");
@@ -234,30 +290,46 @@ final class Maison {
                 if (it.optBoolean("removed") && !it.optBoolean("temp")) continue;
                 long last = time(st.optString("lastWatched"));
                 boolean going = st.optLong("timeOffset") > 0;
-                boolean next = type.equals("series") && st.optString("video_id").contains(":") && now - last < 21 * 86_400_000L;
-                if (going || next) cand.add(it.put("_last", last));
+                boolean series = type.equals("series") && st.optString("video_id").contains(":");
+                it.put("_last", last);
+                if (going || (series && now - last < 21 * 86_400_000L)) cand.add(it);
+                else if (series && it.optString("_id").startsWith("tt")) older.add(it);
             }
-            cand.sort((a, b) -> Long.compare(b.optLong("_last"), a.optLong("_last")));
-            for (org.json.JSONObject it : cand) {
-                if (out.size() >= 6) break;
-                try {
-                    Resume r = stremioItem(it);
-                    if (r != null) out.add(r);
-                } catch (IOException | org.json.JSONException e) {
-                    AppLog.w("stremio " + it.optString("_id") + " : " + e.getMessage());   // un titre raté n'efface pas les autres
+            java.util.Comparator<org.json.JSONObject> recent = (a, b) -> Long.compare(b.optLong("_last"), a.optLong("_last"));
+            cand.sort(recent);
+            older.sort(recent);
+            for (int pass = 0; pass < 2; pass++) {
+                List<org.json.JSONObject> list = pass == 0 ? cand : older.subList(0, Math.min(10, older.size()));
+                for (org.json.JSONObject it : list) {
+                    if (out.size() >= (pass == 0 ? 6 : 8)) break;
+                    try {
+                        Resume r = stremioItem(it, pass == 1);
+                        if (r != null) out.add(r);
+                    } catch (IOException | org.json.JSONException e) {
+                        AppLog.w("stremio " + it.optString("_id") + " : " + e.getMessage());   // un titre raté n'efface pas les autres
+                    }
                 }
             }
         } catch (IOException | org.json.JSONException e) {
-            AppLog.w("stremio : " + e.getMessage());   // clé périmée ou pas de réseau : on garde la liste d'avant
-            return stremioCache;
+            AppLog.w("stremio : " + e.getMessage());
+            return null;
         }
-        return stremioCache = out;
+        return out;
     }
 
-    private static Resume stremioItem(org.json.JSONObject it) throws IOException, org.json.JSONException {
+    private static org.json.JSONArray episodes(String id) throws IOException, org.json.JSONException {
+        Object[] hit = EPISODES.get(id);
+        if (hit != null && System.currentTimeMillis() - (Long) hit[0] < 6 * 3_600_000L) return (org.json.JSONArray) hit[1];
+        org.json.JSONArray videos = get("https://v3-cinemeta.strem.io/meta/series/" + id + ".json").getJSONObject("meta").optJSONArray("videos");
+        if (videos != null) EPISODES.put(id, new Object[] {System.currentTimeMillis(), videos});
+        return videos;
+    }
+
+    /** `fresh` : série laissée depuis plus de trois semaines, on ne la remonte que pour un épisode tout juste sorti. */
+    private static Resume stremioItem(org.json.JSONObject it, boolean fresh) throws IOException, org.json.JSONException {
         org.json.JSONObject st = it.getJSONObject("state");
         String id = it.getString("_id"), vid = st.optString("video_id");
-        long position = st.optLong("timeOffset"), duration = st.optLong("duration");
+        long position = st.optLong("timeOffset"), duration = st.optLong("duration"), now = System.currentTimeMillis();
         Resume r = new Resume();
         r.pkg = STREMIO;
         r.title = it.optString("name");
@@ -272,8 +344,7 @@ final class Maison {
             r.intentUri = "stremio:///detail/series/" + id + "/" + vid;
             r.image = it.optString("poster", null);
         } else {
-            org.json.JSONArray videos = get("https://v3-cinemeta.strem.io/meta/series/" + id + ".json")
-                    .getJSONObject("meta").optJSONArray("videos");
+            org.json.JSONArray videos = episodes(id);
             if (videos == null) return null;
             List<org.json.JSONObject> eps = new ArrayList<>();
             for (int i = 0; i < videos.length(); i++) if (videos.getJSONObject(i).optInt("season") > 0) eps.add(videos.getJSONObject(i));
@@ -284,14 +355,17 @@ final class Maison {
             if (at < 0) return null;
             org.json.JSONObject ep = eps.get(at);
             if (position <= 0) {   // épisode fini : le suivant, s'il est sorti
-                if (at + 1 >= eps.size() || time(eps.get(at + 1).optString("released")) > System.currentTimeMillis()) return null;
+                if (at + 1 >= eps.size()) return null;
                 ep = eps.get(at + 1);
+                long released = time(ep.optString("released"));
+                if (released > now || (fresh && now - released > 14 * 86_400_000L)) return null;
+                if (fresh) r.engaged = released;   // classé à sa sortie, pas à la dernière séance d'il y a des mois
                 duration = 0;
             }
             r.intentUri = "stremio:///detail/series/" + id + "/" + ep.optString("id");
             r.image = ep.optString("thumbnail", null);
             meta.append("Saison ").append(ep.optInt("season")).append(" · Épisode ").append(ep.optInt("episode"));
-            if (position <= 0) meta.append(" · à suivre");
+            if (position <= 0) meta.append(fresh ? " · nouvel épisode" : " · à suivre");
         }
         if (duration > 0 && position > 0) r.progress = Math.min(1f, (float) position / duration);
         left(meta, position, duration);
