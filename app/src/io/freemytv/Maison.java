@@ -43,6 +43,7 @@ final class Maison {
     /** Un titre en cours, tel qu'une app l'a publié dans Watch Next. */
     static final class Resume {
         String pkg, app, title, meta, intentUri, image;
+        String wide;                // la même image en grand (fond d'écran), si elle existe
         float progress = -1;        // 0..1, ou -1 : inconnu
         long engaged;               // dernière lecture (epoch ms)
     }
@@ -151,14 +152,8 @@ final class Maison {
                 }
                 if (episode != null && !episode.isEmpty() && meta.length() == 0) meta.append(episode);
                 long position = cur.getLong(8), duration = cur.getLong(9);
-                if (duration > 0 && position > 0) {
-                    r.progress = Math.min(1f, (float) position / duration);
-                    long left = (duration - position) / 60_000L;
-                    if (left > 0) {
-                        if (meta.length() > 0) meta.append(" · ");
-                        meta.append(left).append(" min restantes");
-                    }
-                }
+                if (duration > 0 && position > 0) r.progress = Math.min(1f, (float) position / duration);
+                left(meta, position, duration);
                 r.meta = meta.toString();
                 r.image = cur.getString(7) != null ? cur.getString(7) : cur.getString(6);   // 16:9 d'abord
                 r.engaged = cur.getLong(10);
@@ -169,7 +164,164 @@ final class Maison {
         } catch (SecurityException | IllegalArgumentException e) {
             AppLog.w("reprendre : " + e.getMessage());
         }
+        // Stremio par son API quand la clé est là : ses lignes Watch Next (s'il en publie) font alors doublon.
+        List<Resume> st = stremio();
+        if (!st.isEmpty()) {
+            Set<String> titles = new HashSet<>();
+            for (Resume r : st) titles.add(r.title.toLowerCase(java.util.Locale.ROOT));
+            out.removeIf(r -> STREMIO.equals(r.pkg) || titles.contains(r.title.toLowerCase(java.util.Locale.ROOT)));
+            for (Resume r : st) r.app = HomeApps.launchIntent(c.getPackageManager(), STREMIO) != null ? "Stremio" : null;
+            out.addAll(st);
+            out.sort((a, b) -> Long.compare(b.engaged, a.engaged));
+            while (out.size() > max) out.remove(out.size() - 1);
+        }
         return out;
+    }
+
+    /** « 12 min restantes · fin à 23:12 » au bout de `meta`, si la position et la durée sont connues. */
+    private static void left(StringBuilder meta, long position, long duration) {
+        if (duration <= 0 || position <= 0) return;
+        long left = (duration - position) / 60_000L;
+        if (left <= 0) return;
+        if (meta.length() > 0) meta.append(" · ");
+        meta.append(left).append(" min restantes · fin à ")
+                .append(new java.text.SimpleDateFormat("HH:mm", java.util.Locale.FRANCE)
+                        .format(new java.util.Date(System.currentTimeMillis() + duration - position)));
+    }
+
+    // MARK: - Stremio
+
+    static final String STREMIO = "com.stremio.one";
+    private static List<Resume> stremioCache = Collections.emptyList();
+    private static long stremioAt;
+
+    /**
+     * Le « Continuer » de Stremio, lu dans sa bibliothèque (api.strem.io, clé de session de config.properties) : les
+     * titres entamés, et pour une série dont le dernier épisode est fini (moins de 3 semaines), l'épisode suivant déjà
+     * sorti (Cinemeta). La tuile ouvre Stremio sur l'épisode. Réseau : jamais sur le fil principal. Gardé une minute.
+     */
+    static synchronized List<Resume> stremio() {
+        String key = Config.STREMIO_AUTH.trim();
+        long now = System.currentTimeMillis();
+        if (key.isEmpty() || now - stremioAt < 60_000) return stremioCache;
+        stremioAt = now;
+        List<Resume> out = new ArrayList<>();
+        try {
+            org.json.JSONArray items = post("https://api.strem.io/api/datastoreGet", new org.json.JSONObject()
+                    .put("authKey", key).put("collection", "libraryItem").put("all", true)).getJSONArray("result");
+            List<org.json.JSONObject> cand = new ArrayList<>();
+            for (int i = 0; i < items.length(); i++) {
+                org.json.JSONObject it = items.getJSONObject(i), st = it.optJSONObject("state");
+                String type = it.optString("type");
+                if (st == null || !(type.equals("movie") || type.equals("series"))) continue;
+                if (it.optBoolean("removed") && !it.optBoolean("temp")) continue;
+                long last = time(st.optString("lastWatched"));
+                boolean going = st.optLong("timeOffset") > 0;
+                boolean next = type.equals("series") && st.optString("video_id").contains(":") && now - last < 21 * 86_400_000L;
+                if (going || next) cand.add(it.put("_last", last));
+            }
+            cand.sort((a, b) -> Long.compare(b.optLong("_last"), a.optLong("_last")));
+            for (org.json.JSONObject it : cand) {
+                if (out.size() >= 6) break;
+                try {
+                    Resume r = stremioItem(it);
+                    if (r != null) out.add(r);
+                } catch (IOException | org.json.JSONException e) {
+                    AppLog.w("stremio " + it.optString("_id") + " : " + e.getMessage());   // un titre raté n'efface pas les autres
+                }
+            }
+        } catch (IOException | org.json.JSONException e) {
+            AppLog.w("stremio : " + e.getMessage());   // clé périmée ou pas de réseau : on garde la liste d'avant
+            return stremioCache;
+        }
+        return stremioCache = out;
+    }
+
+    private static Resume stremioItem(org.json.JSONObject it) throws IOException, org.json.JSONException {
+        org.json.JSONObject st = it.getJSONObject("state");
+        String id = it.getString("_id"), vid = st.optString("video_id");
+        long position = st.optLong("timeOffset"), duration = st.optLong("duration");
+        Resume r = new Resume();
+        r.pkg = STREMIO;
+        r.title = it.optString("name");
+        r.engaged = it.optLong("_last");
+        StringBuilder meta = new StringBuilder();
+        if (it.optString("type").equals("movie")) {
+            r.intentUri = "stremio:///detail/movie/" + id + "/" + id;
+            r.image = "https://images.metahub.space/background/small/" + id + "/img";
+            r.wide = "https://images.metahub.space/background/medium/" + id + "/img";
+        } else if (!id.startsWith("tt")) {   // série hors Cinemeta (Kitsu…) : pas de liste d'épisodes, seulement l'entamé
+            if (position <= 0) return null;
+            r.intentUri = "stremio:///detail/series/" + id + "/" + vid;
+            r.image = it.optString("poster", null);
+        } else {
+            org.json.JSONArray videos = get("https://v3-cinemeta.strem.io/meta/series/" + id + ".json")
+                    .getJSONObject("meta").optJSONArray("videos");
+            if (videos == null) return null;
+            List<org.json.JSONObject> eps = new ArrayList<>();
+            for (int i = 0; i < videos.length(); i++) if (videos.getJSONObject(i).optInt("season") > 0) eps.add(videos.getJSONObject(i));
+            eps.sort((a, b) -> a.optInt("season") != b.optInt("season") ? a.optInt("season") - b.optInt("season")
+                    : a.optInt("episode") - b.optInt("episode"));
+            int at = -1;
+            for (int i = 0; i < eps.size(); i++) if (eps.get(i).optString("id").equals(vid)) at = i;
+            if (at < 0) return null;
+            org.json.JSONObject ep = eps.get(at);
+            if (position <= 0) {   // épisode fini : le suivant, s'il est sorti
+                if (at + 1 >= eps.size() || time(eps.get(at + 1).optString("released")) > System.currentTimeMillis()) return null;
+                ep = eps.get(at + 1);
+                duration = 0;
+            }
+            r.intentUri = "stremio:///detail/series/" + id + "/" + ep.optString("id");
+            r.image = ep.optString("thumbnail", null);
+            meta.append("Saison ").append(ep.optInt("season")).append(" · Épisode ").append(ep.optInt("episode"));
+            if (position <= 0) meta.append(" · à suivre");
+        }
+        if (duration > 0 && position > 0) r.progress = Math.min(1f, (float) position / duration);
+        left(meta, position, duration);
+        r.meta = meta.toString();
+        return r;
+    }
+
+    private static long time(String iso) {
+        try {
+            return java.time.Instant.parse(iso).toEpochMilli();
+        } catch (RuntimeException e) {
+            return 0;
+        }
+    }
+
+    private static org.json.JSONObject post(String url, org.json.JSONObject body) throws IOException, org.json.JSONException {
+        return json(url, body.toString().getBytes("UTF-8"));
+    }
+
+    private static org.json.JSONObject get(String url) throws IOException, org.json.JSONException {
+        return json(url, null);
+    }
+
+    private static org.json.JSONObject json(String url, byte[] body) throws IOException, org.json.JSONException {
+        HttpURLConnection h = (HttpURLConnection) new URL(url).openConnection();
+        try {
+            h.setConnectTimeout(5_000);
+            h.setReadTimeout(10_000);
+            if (body != null) {
+                h.setRequestMethod("POST");
+                h.setRequestProperty("Content-Type", "application/json");
+                h.setDoOutput(true);
+                h.getOutputStream().write(body);
+            }
+            if (h.getResponseCode() != 200) throw new IOException("HTTP " + h.getResponseCode());
+            try (InputStream in = h.getInputStream()) {
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                byte[] buf = new byte[16_384];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                org.json.JSONObject o = new org.json.JSONObject(out.toString("UTF-8"));
+                if (o.has("error")) throw new IOException(o.optJSONObject("error") != null ? o.getJSONObject("error").optString("message") : "erreur");
+                return o;
+            }
+        } finally {
+            h.disconnect();
+        }
     }
 
     // MARK: - Apps récentes

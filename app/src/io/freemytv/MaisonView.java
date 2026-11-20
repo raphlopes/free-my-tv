@@ -55,7 +55,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     // MARK: - Cellules
 
     private static final int C_RESUME = 0, C_PICK = 1, C_APP = 2, C_ALL = 3, C_SALON = 4, C_SOUND = 5, C_INPUTS = 6,
-            C_SETTINGS = 7;
+            C_SETTINGS = 7, C_CONTROL = 8, C_SLEEP = 9, C_VOLUME = 10, C_BLUETOOTH = 11, C_NETWORK = 12;
 
     private static final class Cell {
         int kind;
@@ -94,6 +94,16 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     private String sheetTitle;
     private final List<Cell> sheetCells = new ArrayList<>();
     private int sheetIndex;
+
+    // Projo : la pastille de l'en-tête (au-dessus de la première rangée) et son panneau, à droite
+    private boolean head, panel;
+    private final Cell headCell = new Cell();
+    private final List<Cell> panelCells = new ArrayList<>();
+    private int panelIndex;
+    private float panelF;          // 0 fermé .. 1 ouvert
+    private List<Cell> tonight = new ArrayList<>();
+    private Cell shelf;            // le titre mis en avant : le dernier contenu focalisé (fond et texte du haut)
+    private float dockRight;
 
     // Données
     private List<Maison.Resume> resumes = new ArrayList<>();
@@ -141,6 +151,9 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         weather = text(geist400, 40, ink);
         weather.setLetterSpacing(-0.03f);
         stroke.setStyle(Paint.Style.STROKE);
+        headCell.kind = C_CONTROL;
+        headCell.radius = 28;
+        headCell.r.set(W - SAFE_X - 56, SAFE_Y, W - SAFE_X, SAFE_Y + 56);
         rebuild();
     }
 
@@ -200,6 +213,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     void reset(boolean animated) {
         touched = false;
         sheet = false;
+        head = panel = false;
         row = 0;
         col = 0;
         snapFocus();
@@ -230,6 +244,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             List<String> order = new ArrayList<>(Maison.recent(c, launchable, 6));
             for (String pkg : HomeApps.shelfPackages(c)) if (!order.contains(pkg) && launchable.contains(pkg)) order.add(pkg);
             for (HomeApps.Item it : all) if (!order.contains(it.pkg)) order.add(it.pkg);
+            if (order.remove(Maison.STREMIO)) order.add(0, Maison.STREMIO);   // l'app de tous les soirs : toujours la première
             List<HomeApps.Item> row = new ArrayList<>();
             for (String pkg : order) {
                 if (row.size() >= 6) break;
@@ -395,51 +410,97 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         return s.length() > 0 ? s.toString() : "TV et HDMI";
     }
 
+    private static final float CARDS_Y = 518, DOCK_Y = 776, DOCK_PAD = 42, DOCK_W = 250, DOCK_H = 141, DOCK_GAP = 24;
+
     private void buildProjo(List<Recs.Pick> picks) {
-        // « Ce soir » (reprises puis suggestions) et « Apps » (récentes d'abord), 5 au plus chacune, puis les raccourcis.
-        List<Cell> tonight = new ArrayList<>();
-        for (Maison.Resume r : resumes) if (tonight.size() < 3) tonight.add(resumeCell(r));
+        // En haut, le titre mis en avant sur son image ; puis « Ce soir » (reprises, puis suggestions) ; puis le dock des apps.
+        tonight = new ArrayList<>();
+        for (Maison.Resume r : resumes) if (tonight.size() < 5) tonight.add(resumeCell(r));
         for (Recs.Pick p : picks) if (tonight.size() < 5) tonight.add(pickCell(p));
-        List<Cell> appCells = new ArrayList<>();
+        if (!tonight.isEmpty()) {
+            float x = SAFE_X;
+            for (Cell c : tonight) {
+                c.frame = true;
+                c.radius = 16;
+                c.r.set(x, CARDS_Y, x + 320, CARDS_Y + 180);
+                x += 320 + GAP;
+            }
+            addRow("Ce soir", tonight);
+        }
+        List<Cell> dock = new ArrayList<>();
+        float x = SAFE_X + DOCK_PAD, y = DOCK_Y + 28;
         for (HomeApps.Item it : apps) {
-            if (appCells.size() >= 4) break;
+            if (dock.size() >= 5) break;
             Cell c = new Cell();
             c.kind = C_APP;
             c.item = it;
-            appCells.add(c);
+            dock.add(c);
         }
         Cell all = new Cell();
         all.kind = C_ALL;
         all.title = "Toutes les apps";
-        all.sub = allApps.size() + " installées";
-        appCells.add(all);
-        // Une seule rangée : centrée ; deux : la première remonte sous l'en-tête, 360 px de l'une à l'autre.
-        float top = tonight.isEmpty() ? 1080 / 2f - 200 : 220;
-        if (!tonight.isEmpty()) {
-            frameRow(tonight, top);
-            addRow("Ce soir", tonight);
-            top += 360;
+        dock.add(all);
+        for (Cell c : dock) {
+            c.radius = 14;
+            c.r.set(x, y, x + DOCK_W, y + DOCK_H);
+            x += DOCK_W + DOCK_GAP;
         }
-        frameRow(appCells, top);
-        addRow("Apps", appCells);
-        float x;
-        List<Cell> quick = new ArrayList<>();
-        float qy = top + 180 + 22 + 40 + 6 + 30 + 56;
-        x = SAFE_X;
-        // Les réglages du projecteur (mise au point, trapèze, luminosité) restent ceux de XGIMI : on y mène, rien de plus.
-        quick.add(quickCell(C_SETTINGS, x, qy, "Réglages du projecteur", "settings"));
-        x = quick.get(0).r.right + 44;
-        if (!inputs.isEmpty()) quick.add(quickCell(C_INPUTS, x, qy, "Entrées", "input"));
-        addRow(null, quick);
+        dockRight = x - DOCK_GAP + DOCK_PAD;
+        addRow(null, dock);
+        shelf = null;
     }
 
-    private static void frameRow(List<Cell> cells, float top) {
-        float x = SAFE_X;
-        for (Cell c : cells) {
-            c.frame = true;
-            c.radius = 12;
-            c.r.set(x, top, x + 320, top + 180);
-            x += 320 + GAP;
+    // MARK: - Panneau de contrôle (projo)
+
+    private void openPanel() {
+        panelCells.clear();
+        float x0 = W - 48 - 620 + 20, x1 = W - 48 - 20, y = 48 + 190;
+        y = panelCell(C_SLEEP, "Mettre en veille", null, "bedtime", null, x0, x1, y);
+        y = panelCell(C_VOLUME, "Son", null, "speaker", null, x0, x1, y);
+        // Mise au point, trapèze, luminosité : les réglages de XGIMI, on y mène.
+        y = panelCell(C_SETTINGS, "Réglages du projecteur", "Image, mise au point, trapèze", "settings", null, x0, x1, y);
+        y = panelCell(C_BLUETOOTH, "Bluetooth", "Appairer une télécommande, une enceinte", "bluetooth", null, x0, x1, y);
+        y = panelCell(C_NETWORK, "Réseau", "Wi-Fi", "wifi", null, x0, x1, y);
+        y += 56;   // l'intertitre « Entrées »
+        for (HomeApps.Item it : inputs) {
+            if (it.kind != HomeApps.INPUT || y + 84 > H - 48 - 20) continue;
+            y = panelCell(C_APP, it.label, it.connected ? "Branché" : "Rien de branché", it.symbol != null ? it.symbol : "hdmi", it, x0, x1, y);
+        }
+        panelIndex = 1;   // le son : ce qu'on vient régler le plus souvent
+        panel = true;
+        invalidate();
+    }
+
+    private float panelCell(int kind, String title, String sub, String icon, HomeApps.Item item, float x0, float x1, float y) {
+        Cell c = new Cell();
+        c.kind = kind;
+        c.title = title;
+        c.sub = sub;
+        c.icon = icon;
+        c.item = item;
+        c.radius = 20;
+        c.r.set(x0, y, x1, y + 84);
+        panelCells.add(c);
+        return y + 88;
+    }
+
+    private void closePanel() {
+        panel = false;
+        invalidate();
+    }
+
+    private android.media.AudioManager audio() {
+        return (android.media.AudioManager) activity.getSystemService(Context.AUDIO_SERVICE);
+    }
+
+    private void settings(String action, Cell c) {
+        try {
+            activity.startActivity(new Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (RuntimeException e) {   // pas d'écran dédié sur ce firmware : les réglages complets
+            HomeApps.Item it = new HomeApps.Item();
+            it.kind = HomeApps.ANDROID_SETTINGS;
+            it.label = c.title;
+            HomeApps.open(activity, it, this, 0, 0, 1, 1);
         }
     }
 
@@ -493,8 +554,14 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
                 if (!held) activate();
                 return true;
+            case KeyEvent.KEYCODE_MENU:
+                if (!projo || sheet) return false;
+                if (panel) closePanel(); else openPanel();
+                return true;
             case KeyEvent.KEYCODE_BACK:
-                if (sheet) {
+                if (panel) {
+                    closePanel();
+                } else if (sheet) {
                     sheet = false;
                     snapFocus();
                     invalidate();
@@ -508,12 +575,21 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     private static boolean isOurs(int code) {
         return code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT || code == KeyEvent.KEYCODE_DPAD_UP
                 || code == KeyEvent.KEYCODE_DPAD_DOWN || code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
-                || code == KeyEvent.KEYCODE_NUMPAD_ENTER || code == KeyEvent.KEYCODE_BACK;
+                || code == KeyEvent.KEYCODE_NUMPAD_ENTER || code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_MENU;
     }
 
     private void move(int dx, int dy, boolean held) {
         touched = true;
-        if (sheet) {
+        if (panel) {
+            Cell f = focused();
+            if (dy != 0) panelIndex = Math.max(0, Math.min(panelCells.size() - 1, panelIndex + dy));
+            else if (f != null && f.kind == C_VOLUME)
+                audio().adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC,
+                        dx > 0 ? android.media.AudioManager.ADJUST_RAISE : android.media.AudioManager.ADJUST_LOWER, 0);
+            else if (dx < 0) closePanel();
+        } else if (head) {
+            if (dy > 0) head = false;
+        } else if (sheet) {
             int cols = 7, n = sheetCells.size();
             if (n == 0) return;
             int next = sheetIndex + dx + dy * cols;
@@ -530,7 +606,11 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 col = next;
             } else {
                 int next = row + dy;
-                if (next < 0 || next >= rows.size()) return;
+                if (next < 0 && projo) head = true;
+                if (next < 0 || next >= rows.size()) {
+                    invalidate();
+                    return;
+                }
                 RectF from = rows.get(row).get(col).r;
                 float cx = from.left + Math.min(from.width(), 219) / 2;   // depuis le héros : la première app, pas celle du milieu
                 row = next;
@@ -552,6 +632,8 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     }
 
     private Cell focused() {
+        if (panel) return panelIndex < panelCells.size() ? panelCells.get(panelIndex) : null;
+        if (head) return headCell;
         if (sheet) return sheetIndex < sheetCells.size() ? sheetCells.get(sheetIndex) : null;
         if (row >= rows.size() || rows.get(row).isEmpty()) return null;
         return rows.get(row).get(Math.min(col, rows.get(row).size() - 1));
@@ -581,6 +663,28 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 break;
             case C_ALL:
                 openSheet("Toutes les apps", allApps);
+                break;
+            case C_CONTROL:
+                openPanel();
+                break;
+            case C_SLEEP: {
+                closePanel();
+                Context app = activity.getApplicationContext();
+                new Thread(() -> {   // la touche Veille, par l'ADB local (une appli n'a pas le droit de l'envoyer)
+                    try (Adb adb = Adb.connect(app, 5_000, null)) {
+                        adb.shell("input keyevent 223");
+                    } catch (java.io.IOException e) {
+                        AppLog.w("veille : " + e.getMessage());
+                    }
+                }, "veille").start();
+                break;
+            }
+            case C_BLUETOOTH:
+                // Pas d'écran Bluetooth sur Google TV : celui qui appaire un accessoire (télécommande, enceinte).
+                settings("com.google.android.intent.action.CONNECT_INPUT", c);
+                break;
+            case C_NETWORK:
+                settings(android.provider.Settings.ACTION_WIFI_SETTINGS, c);
                 break;
             case C_INPUTS:
                 openSheet("Entrées", inputs);
@@ -644,7 +748,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
 
     private void snapFocus() {
         Cell f = focused();
-        for (List<Cell> r : rows) for (Cell c : r) c.f = c == f ? 1 : 0;
+        for (Cell c : allCells()) c.f = c == f ? 1 : 0;
         for (Cell c : sheetCells) c.f = c == f ? 1 : 0;
     }
 
@@ -662,6 +766,11 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             c.f = target > c.f ? Math.min(target, c.f + step) : Math.max(target, c.f - step);
             moving = true;
         }
+        float open = panel ? 1 : 0;
+        if (panelF != open) {
+            panelF = open > panelF ? Math.min(1, panelF + dt / 220) : Math.max(0, panelF - dt / 220);
+            moving = true;
+        }
         if (!moving) lastFrame = 0;
         return moving;
     }
@@ -669,6 +778,8 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     private List<Cell> allCells() {
         List<Cell> all = new ArrayList<>();
         for (List<Cell> r : rows) all.addAll(r);
+        all.add(headCell);
+        all.addAll(panelCells);
         return all;
     }
 
@@ -751,7 +862,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         HomeData.Weather wx = data.weather;
         if (wx != null && !Double.isNaN(wx.temp)) {
             String deg = HomeData.degrees(wx.temp), cond = HomeData.condition(wx.code, wx.isDay);
-            float right = W - SAFE_X;
+            float right = W - SAFE_X - (projo ? 56 + 28 : 0);
             float wc = meta.measureText(cond);
             meta.setColor(ink2);
             c.drawText(cond, right - wc, base, meta);
@@ -829,7 +940,8 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     private static final float SHEET_STEP = 123 + 96;   // une rangée d'apps + son nom sous le focus
 
     private Bitmap imageOf(Cell cell, boolean wide) {
-        if (cell.resume != null) return Maison.image(getContext(), cell.resume.image, wide ? 1104 : 640, this::invalidate);
+        if (cell.resume != null) return Maison.image(getContext(), wide && cell.resume.wide != null ? cell.resume.wide : cell.resume.image,
+                wide ? 1104 : 640, this::invalidate);
         if (cell.pick != null) {
             Backdrop b = recs.backdrop(cell.pick);
             return b == null ? null : wide ? b.wide : b.tall;
@@ -863,9 +975,12 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         scrim.setShader(new LinearGradient(0, r.bottom, 0, r.bottom - r.height() * 0.55f, 0xD902070A, 0x0002070A, Shader.TileMode.CLAMP));
         c.drawRoundRect(r, cell.radius, cell.radius, scrim);
         scrim.setShader(null);
-        float x = r.left + 48, bottom = r.bottom - 44;
+        heroText(c, cell, r.left + 48, r.bottom - 44);
+    }
+
+    /** De bas en haut depuis `bottom` : jauge, méta, titre (serif), section. */
+    private void heroText(Canvas c, Cell cell, float x, float bottom) {
         boolean resume = cell.resume != null;
-        // De bas en haut : jauge, méta, titre, section.
         if (resume && cell.resume.progress > 0) {
             fill.setColor(0x2EEEF3F6);
             tmp2.set(x, bottom - 6, x + 420, bottom);
@@ -984,37 +1099,153 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
 
     // MARK: - Projo
 
+    private final RectF screen = new RectF(0, 0, W, H);
+    private final Shader shadeLeft = new LinearGradient(0, 0, W * 0.75f, 0,
+            new int[] {0xF202070A, 0xB302070A, 0x4002070A}, new float[] {0, 0.55f, 1}, Shader.TileMode.CLAMP);
+    private final Shader shadeDown = new LinearGradient(0, 300, 0, 740, 0x0002070A, 0xFF02070A, Shader.TileMode.CLAMP);
+
     private void drawProjo(Canvas c) {
+        // Le titre mis en avant suit le focus tant qu'il est sur un contenu ; sur les apps, il garde le dernier.
+        Cell f = focused();
+        if (f != null && tonight.contains(f)) shelf = f;
+        if (shelf == null && !tonight.isEmpty()) shelf = tonight.get(0);
+        Bitmap bg = shelf == null ? null : imageOf(shelf, true);
+        if (bg != null && !bg.isRecycled()) {
+            cover(c, bg, screen, 0);
+            scrim.setShader(shadeLeft);
+            c.drawRect(screen, scrim);
+            scrim.setShader(shadeDown);
+            c.drawRect(screen, scrim);
+            scrim.setShader(null);
+        }
         drawHeader(c);
+        if (headCell.f > 0) drawFocus(c, headCell.r, headCell.radius, ease(headCell.f));
+        fill.setColor(0x14EEF3F6);
+        c.drawRoundRect(headCell.r, 28, 28, fill);
+        drawIcon(c, "sliders", headCell.r.centerX(), headCell.r.centerY(), 28, headCell.f > 0.5f ? ink : ink2);
+        if (shelf != null) {
+            heroText(c, shelf, SAFE_X, CARDS_Y - 68);
+        } else {
+            int hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
+            String hello = hour >= 18 || hour < 5 ? "Bonsoir" : "Bonjour";
+            heroTitle.setTextSize(96);
+            meta.setColor(ink2);
+            c.drawText("Rien en cours. Choisis une app.", SAFE_X, CARDS_Y - 68, meta);
+            c.drawText(hello, SAFE_X - Ui.leftBearing(heroTitle, hello), CARDS_Y - 68 - 46, heroTitle);
+        }
+        // Le dock : un verre sans flou (un voile clair et son filet).
+        tmp2.set(SAFE_X, DOCK_Y, dockRight, DOCK_Y + 28 + DOCK_H + 52);
+        fill.setColor(0x0FEEF3F6);
+        c.drawRoundRect(tmp2, 40, 40, fill);
+        stroke.setStrokeWidth(1.5f);
+        stroke.setColor(0x24EEF3F6);
+        c.drawRoundRect(tmp2, 40, 40, stroke);
         for (int r = 0; r < rows.size(); r++) {
             List<Cell> cells = rows.get(r);
             String title = rowTitles.get(r);
             if (title != null) {
                 section.setColor(muted);
-                c.drawText(title.toUpperCase(java.util.Locale.ROOT), SAFE_X, cells.get(0).r.top - 24 - 4, section);
+                c.drawText(title.toUpperCase(java.util.Locale.ROOT), SAFE_X, cells.get(0).r.top - 28, section);
             }
-            for (Cell cell : cells) drawCell(c, cell);
+            Cell top = null;   // l'élément focalisé en dernier : il grandit sur ses voisins
+            for (Cell cell : cells) {
+                if (cell.f > 0 && (top == null || cell.f > top.f)) top = cell;
+                else drawCell(c, cell);
+            }
+            if (top != null) {
+                drawCell(c, top);
+                if (top.kind == C_APP && !top.frame) {   // dock : le nom de l'app focalisée, sous sa tuile
+                    String name = top.item.label;
+                    meta.setTextSize(22);
+                    meta.setColor(Ui.alpha(ink, ease(top.f)));
+                    c.drawText(ellipsize(name, meta, DOCK_W), top.r.left, top.r.bottom + 38, meta);
+                    meta.setTextSize(24);
+                }
+            }
         }
+        if (panelF > 0) drawPanel(c);
     }
 
+    /** Une carte de « Ce soir » : l'image, la jauge dedans, le titre dessous (le détail est en haut de l'écran). */
     private void drawFrame(Canvas c, Cell cell, RectF r, float f) {
-        if (cell.kind == C_APP) drawApp(c, cell.item, r, cell.radius, f);
-        else if (cell.kind == C_ALL) {
-            fill.setColor(SURFACE);
-            c.drawRoundRect(r, cell.radius, cell.radius, fill);
-            drawIcon(c, "apps", r.centerX(), r.centerY(), 48, ink2);
-        } else cover(c, imageOf(cell, true), r, cell.radius);
-        // Légende sous l'image, une ligne chacune.
-        String title = cell.kind == C_APP ? cell.item.label : cell.title;
-        String sub = cell.kind == C_APP ? null : cell.kind == C_ALL ? cell.sub
-                : cell.resume != null ? "Reprendre" + (cell.resume.progress > 0 && cell.sub != null && cell.sub.contains("min") ? " · " + cell.sub.substring(cell.sub.lastIndexOf("· ") + 2).replace(" restantes", "") : "")
-                : Recs.serviceName(cell.pick);
-        float base = cell.r.bottom + 22 + Ui.cap(frameTitle);
-        frameTitle.setColor(ink);
-        c.drawText(ellipsize(title == null ? "" : title, frameTitle, 320), cell.r.left, base, frameTitle);
-        meta.setColor(cell.resume != null ? WARM : muted);
-        if (sub != null) c.drawText(ellipsize(sub, meta, 320), cell.r.left, base + 6 + 30, meta);
+        cover(c, imageOf(cell, false), r, cell.radius);
+        if (cell.resume != null && cell.resume.progress > 0) {
+            float x0 = r.left + 16, x1 = r.right - 16, y = r.bottom - 14;
+            fill.setColor(0x9902070A);
+            tmp2.set(x0, y - 5, x1, y);
+            c.drawRoundRect(tmp2, 2.5f, 2.5f, fill);
+            fill.setColor(WARM);
+            tmp2.set(x0, y - 5, x0 + (x1 - x0) * cell.resume.progress, y);
+            c.drawRoundRect(tmp2, 2.5f, 2.5f, fill);
+        }
+        meta.setColor(f > 0.5f ? ink : muted);
+        c.drawText(ellipsize(cell.title == null ? "" : cell.title, meta, 320), cell.r.left, cell.r.bottom + 44, meta);
     }
+
+    private void drawPanel(Canvas c) {
+        float e = ease(panelF);
+        fill.setColor(Ui.alpha(0xB302070A, e));
+        c.drawRect(screen, fill);
+        c.save();
+        c.translate((1 - e) * 700, 0);
+        float left = W - 48 - 620, top = 48;
+        tmp2.set(left, top, W - 48, H - 48);
+        fill.setColor(0xF50A1820);
+        c.drawRoundRect(tmp2, 40, 40, fill);
+        stroke.setStrokeWidth(1.5f);
+        stroke.setColor(0x24EEF3F6);
+        c.drawRoundRect(tmp2, 40, 40, stroke);
+        long now = System.currentTimeMillis();
+        time.setTextSize(72);
+        c.drawText(Ui.clock(now), left + 44, top + 44 + Ui.cap(time), time);
+        time.setTextSize(48);
+        meta.setColor(muted);
+        c.drawText(capitalize(Ui.date(now)), left + 44, top + 44 + 52 + 48, meta);
+        android.media.AudioManager am = audio();
+        int max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC);
+        float volume = max > 0 ? (float) am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) / max : 0;
+        boolean label = false;
+        for (Cell cell : panelCells) {
+            if (cell.kind == C_APP && !label) {
+                label = true;
+                section.setColor(muted);
+                c.drawText("ENTRÉES", left + 44, cell.r.top - 20, section);
+            }
+            float f = ease(cell.f);
+            // Focus du panneau : la ligne passe en clair, son texte en sombre.
+            if (f > 0) {
+                fill.setColor(Ui.alpha(ink, f));
+                c.drawRoundRect(cell.r, cell.radius, cell.radius, fill);
+            }
+            int fg = f > 0.5f ? BG : ink, fg2 = f > 0.5f ? 0xB302070A : muted;
+            float cx = cell.r.left + 24 + 16, cy = cell.r.centerY(), tx = cell.r.left + 24 + 32 + 22;
+            if (PATH_ICONS.contains(cell.icon)) drawIcon(c, cell.icon, cx, cy, 32, fg);
+            else Symbols.draw(getContext(), c, cell.icon, cx, cy, 28, fg);
+            tile.setColor(fg);
+            if (cell.kind == C_VOLUME) {
+                c.drawText(cell.title, tx, cy - 6, tile);
+                float x1 = cell.r.right - 28, y = cy + 20;
+                fill.setColor(f > 0.5f ? 0x3302070A : 0x2EEEF3F6);
+                tmp2.set(tx, y - 6, x1, y);
+                c.drawRoundRect(tmp2, 3, 3, fill);
+                fill.setColor(fg);
+                tmp2.set(tx, y - 6, tx + (x1 - tx) * volume, y);
+                c.drawRoundRect(tmp2, 3, 3, fill);
+            } else if (cell.sub == null) {
+                c.drawText(cell.title, tx, cy + Ui.cap(tile) / 2, tile);
+            } else {
+                c.drawText(ellipsize(cell.title, tile, cell.r.right - tx - 20), tx, cy - 6, tile);
+                meta.setTextSize(22);
+                meta.setColor(fg2);
+                c.drawText(ellipsize(cell.sub, meta, cell.r.right - tx - 20), tx, cy + 26, meta);
+                meta.setTextSize(24);
+            }
+            tile.setColor(ink);
+        }
+        c.restore();
+    }
+
+    private static final Set<String> PATH_ICONS = new HashSet<>(java.util.Arrays.asList("speaker", "settings", "bluetooth", "wifi", "input"));
 
     private void drawQuick(Canvas c, Cell cell, float f) {
         // Raccourcis du projo : un pictogramme et un libellé ; le focus entoure le libellé (drawFocus déjà fait).
@@ -1133,6 +1364,28 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                     tmp2.set(p[0], p[1], p[0] + 6, p[1] + 6);
                     c.drawRoundRect(tmp2, 1.5f, 1.5f, fill);
                 }
+                break;
+            case "sliders":
+                c.drawLine(4, 8, 20, 8, stroke);
+                c.drawLine(4, 16, 20, 16, stroke);
+                c.drawCircle(9, 8, 2.6f, fill);
+                c.drawCircle(15, 16, 2.6f, fill);
+                break;
+            case "bluetooth":
+                path.moveTo(7, 7.5f);
+                path.lineTo(16.5f, 16.5f);
+                path.lineTo(12, 21);
+                path.lineTo(12, 3);
+                path.lineTo(16.5f, 7.5f);
+                path.lineTo(7, 16.5f);
+                c.drawPath(path, stroke);
+                break;
+            case "wifi":
+                for (float rad : new float[] {5, 9.5f, 14}) {
+                    tmp2.set(12 - rad, 19 - rad, 12 + rad, 19 + rad);
+                    c.drawArc(tmp2, -135, 90, false, stroke);
+                }
+                c.drawCircle(12, 19, 1.4f, fill);
                 break;
             case "settings":
                 c.drawCircle(12, 12, 3.2f, stroke);
