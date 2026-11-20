@@ -461,6 +461,10 @@ final class Maison {
         return null;
     }
 
+    static void forget(String uri) {
+        IMAGES.remove(uri);
+    }
+
     private static byte[] read(ContentResolver cr, String uri) throws IOException {
         Uri u = Uri.parse(uri);
         InputStream in;

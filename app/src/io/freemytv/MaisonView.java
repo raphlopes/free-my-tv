@@ -34,7 +34,7 @@ import java.util.Set;
  * TV : en-tête, héros (Reprendre, sinon une suggestion) et deux affiches, Apps (les récentes d'abord), Salon (hub).
  * Projo : l'en-tête (heure, date, météo), « Ce soir » et « Apps » en images 16:9 avec légende, puis les raccourcis (réglages du projecteur, entrées).
  * Toutes les mesures sont en px de la maquette 1920×1080 ; le canevas est mis à l'échelle de l'écran.
- * Pas de flou, pas de clipPath, un seul saveLayer (le fondu du panneau, petit) ; on ne redessine que pendant une animation ou un changement.
+ * Pas de flou, pas de saveLayer, pas de clipPath ; on ne redessine que pendant une animation ou un changement.
  */
 final class MaisonView extends View implements HomeData.Listener, Recs.Listener {
 
@@ -1130,24 +1130,66 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     // MARK: - Projo
 
     private final RectF screen = new RectF(0, 0, W, H);
-    private final Shader shadeLeft = new LinearGradient(0, 0, W * 0.75f, 0,
-            new int[] {0xF202070A, 0xB302070A, 0x4002070A}, new float[] {0, 0.55f, 1}, Shader.TileMode.CLAMP);
-    private final Shader shadeDown = new LinearGradient(0, 300, 0, 740, 0x0002070A, 0xFF02070A, Shader.TileMode.CLAMP);
+    // Le fond d'un titre : l'image et ses deux voiles, composés une fois à mi-résolution hors du fil d'affichage. Dessiner
+    // l'image puis deux dégradés plein écran à chaque image coûtait 25 ms sur le projo (mesuré le 20/11).
+    private final java.util.LinkedHashMap<String, Bitmap> backdrops = new java.util.LinkedHashMap<String, Bitmap>(8, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, Bitmap> e) { return size() > 5; }
+    };
+    private final Set<String> composing = new HashSet<>();
+    private Bitmap lastBackdrop;
+
+    private Bitmap backdropOf(Cell cell) {
+        String key = key(cell);
+        Bitmap ready = backdrops.get(key);
+        if (ready != null || composing.contains(key)) return ready;
+        Bitmap src = imageOf(cell, true);
+        if (src == null) return null;
+        composing.add(key);
+        String raw = cell.resume != null ? cell.resume.wide : null;
+        new Thread(() -> {
+            Bitmap out = null;
+            try {
+                out = Bitmap.createBitmap(960, 540, Bitmap.Config.ARGB_8888);
+                Canvas g = new Canvas(out);
+                g.drawColor(BG);
+                g.scale(0.5f, 0.5f);
+                float sc = Math.max(W / src.getWidth(), H / src.getHeight());
+                Matrix m = new Matrix();
+                m.setScale(sc, sc);
+                m.postTranslate((W - src.getWidth() * sc) / 2, (H - src.getHeight() * sc) / 2);
+                Paint p = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+                g.drawBitmap(src, m, p);
+                p.setShader(new LinearGradient(0, 0, W * 0.75f, 0,
+                        new int[] {0xF202070A, 0xB302070A, 0x4002070A}, new float[] {0, 0.55f, 1}, Shader.TileMode.CLAMP));
+                g.drawRect(0, 0, W, H, p);
+                p.setShader(new LinearGradient(0, 300, 0, 740, 0x0002070A, 0xFF02070A, Shader.TileMode.CLAMP));
+                g.drawRect(0, 0, W, H, p);
+                out.setHasAlpha(false);
+            } catch (RuntimeException | OutOfMemoryError e) {
+                AppLog.w("fond : " + e.getMessage());
+                out = null;
+            }
+            Bitmap done = out;
+            handler.post(() -> {
+                composing.remove(key);
+                if (done == null) return;
+                backdrops.put(key, done);
+                if (raw != null) Maison.forget(raw);   // la grande image ne sert plus : seul le fond composé reste
+                invalidate();
+            });
+        }, "maison-fond").start();
+        return null;
+    }
 
     private void drawProjo(Canvas c) {
         // Le titre mis en avant suit le focus tant qu'il est sur un contenu ; sur les apps, il garde le dernier.
         Cell f = focused();
         if (f != null && tonight.contains(f)) shelf = f;
         if (shelf == null && !tonight.isEmpty()) shelf = tonight.get(0);
-        Bitmap bg = shelf == null ? null : imageOf(shelf, true);
-        if (bg != null && !bg.isRecycled()) {
-            cover(c, bg, screen, 0);
-            scrim.setShader(shadeLeft);
-            c.drawRect(screen, scrim);
-            scrim.setShader(shadeDown);
-            c.drawRect(screen, scrim);
-            scrim.setShader(null);
-        }
+        Bitmap bg = shelf == null ? null : backdropOf(shelf);
+        if (bg != null) lastBackdrop = bg;
+        else if (shelf == null) lastBackdrop = null;
+        if (lastBackdrop != null) c.drawBitmap(lastBackdrop, null, screen, image);   // en attendant le suivant : le précédent
         drawHeader(c);
         if (headCell.f > 0) drawFocus(c, headCell.r, headCell.radius, ease(headCell.f));
         fill.setColor(0x14EEF3F6);
@@ -1214,12 +1256,10 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
 
     private void drawPanel(Canvas c) {
         float e = ease(panelF);
-        fill.setColor(Ui.alpha(0x8C02070A, e));
-        c.drawRect(screen, fill);
-        int layer = c.saveLayerAlpha(W - SAFE_X - PANEL_W - 20, PANEL_TOP - 40, W, panelBottom + 20, (int) (255 * e));   // petit, et seulement pendant l'ouverture
-        c.translate(0, (1 - e) * -16);
+        c.save();   // pas de voile sur l'accueil derrière : un plein écran en transparence coûte ~7 ms par image ici
+        c.translate((1 - e) * (PANEL_W + SAFE_X + 8), 0);   // il glisse depuis le bord droit : pas de calque
         tmp2.set(W - SAFE_X - PANEL_W, PANEL_TOP, W - SAFE_X, panelBottom);
-        fill.setColor(0xF7081419);
+        fill.setColor(0xFF0A161D);
         c.drawRoundRect(tmp2, 36, 36, fill);
         stroke.setStrokeWidth(1.5f);
         stroke.setColor(0x24EEF3F6);
@@ -1270,7 +1310,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 c.drawText(cell.title, r.left + 24, r.bottom - 26, tile);
             }
         }
-        c.restoreToCount(layer);
+        c.restore();
     }
 
     private void drawQuick(Canvas c, Cell cell, float f) {
