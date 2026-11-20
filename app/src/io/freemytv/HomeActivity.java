@@ -35,8 +35,13 @@ public class HomeActivity extends Activity {
         }
         Ui.init(this);
         home = new MaisonView(this);
-        setContentView(home);
-        if (getIntent().getBooleanExtra("panel", false)) home.post(home::togglePanel);   // roue crantée, accueil pas encore lancé
+        android.widget.FrameLayout root = new android.widget.FrameLayout(this);
+        root.addView(home);
+        // Le panneau de contrôle, posé sur l'accueil en haut à droite (il se mesure lui-même).
+        android.widget.FrameLayout.LayoutParams lp = new android.widget.FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
+        lp.topMargin = home.panel().topPx();
+        root.addView(home.panel(), lp);
+        setContentView(root);
         getWindow().setBackgroundDrawable(null);
     }
 
@@ -60,9 +65,7 @@ public class HomeActivity extends Activity {
     /** Home button pressed on the home screen: back to the entry state (focus on the first app, sheet closed). */
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (home == null) return;
-        if (intent.getBooleanExtra("panel", false)) home.togglePanel();   // la roue crantée (RemoteKeys)
-        else home.reset(true);
+        if (home != null) home.reset(true);
     }
 
     @Override protected void onDestroy() {

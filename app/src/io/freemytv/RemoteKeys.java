@@ -43,10 +43,9 @@ final class RemoteKeys {
     /** Opens the app for this key on its first press. True if the key is ours and in use (it is then consumed). */
     static boolean onKey(Context c, KeyEvent e) {
         // Projo (maison) : la roue crantée. Android ne la confie qu'à une appli système (l'accueil Google, désactivé) :
-        // on la prend ici pour ouvrir notre panneau, d'où qu'on soit. Seule touche filtrée sur le projo.
-        if (e.getKeyCode() == KeyEvent.KEYCODE_NOTIFICATION && Maison.projo()) {
-            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0)
-                c.startActivity(new Intent(c, HomeActivity.class).putExtra("panel", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        // le service de touches la prend pour ouvrir notre panneau par-dessus ce qu'on regarde. Seule touche filtrée sur le projo.
+        if (e.getKeyCode() == KeyEvent.KEYCODE_NOTIFICATION && c instanceof RemoteKeyService && Maison.projo()) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) ((RemoteKeyService) c).togglePanel();
             return true;
         }
         if (!supported()) return false;

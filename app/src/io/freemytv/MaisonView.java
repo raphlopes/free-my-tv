@@ -55,7 +55,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     // MARK: - Cellules
 
     private static final int C_RESUME = 0, C_PICK = 1, C_APP = 2, C_ALL = 3, C_SALON = 4, C_SOUND = 5, C_INPUTS = 6,
-            C_SETTINGS = 7, C_CONTROL = 8, C_SLEEP = 9, C_VOLUME = 10, C_BLUETOOTH = 11, C_NETWORK = 12;
+            C_SETTINGS = 7, C_CONTROL = 8;
 
     private static final class Cell {
         int kind;
@@ -97,12 +97,10 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     private final List<Cell> sheetCells = new ArrayList<>();
     private int sheetIndex;
 
-    // Projo : la pastille de l'en-tête (au-dessus de la première rangée) et son panneau, à droite
-    private boolean head, panel;
+    // Projo : la pastille de l'en-tête (au-dessus de la première rangée) ouvre le panneau (PanelView, posé sur l'accueil)
+    private boolean head;
     private final Cell headCell = new Cell();
-    private final List<Cell> panelCells = new ArrayList<>();
-    private int panelIndex;
-    private float panelF;          // 0 fermé .. 1 ouvert
+    private final PanelView panel;
     private List<Cell> tonight = new ArrayList<>();
     private Cell shelf;            // le titre mis en avant : le dernier contenu focalisé (fond et texte du haut)
     private float dockRight;
@@ -153,13 +151,14 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         weather = text(geist400, 40, ink);
         weather.setLetterSpacing(-0.03f);
         stroke.setStyle(Paint.Style.STROKE);
+        panel = new PanelView(a, this::invalidate);
         headCell.kind = C_CONTROL;
         headCell.radius = 28;
         headCell.r.set(W - SAFE_X - 56, SAFE_Y, W - SAFE_X, SAFE_Y + 56);
         rebuild();
     }
 
-    private static Typeface font(Context c, String path, int weight) {
+    static Typeface font(Context c, String path, int weight) {
         try {
             return new Typeface.Builder(c.getAssets(), path).setFontVariationSettings("'wght' " + weight).build();
         } catch (RuntimeException e) {
@@ -215,7 +214,8 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     void reset(boolean animated) {
         touched = false;
         sheet = false;
-        head = panel = false;
+        head = false;
+        panel.close();
         row = 0;
         col = 0;
         snapFocus();
@@ -452,103 +452,8 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         shelf = null;
     }
 
-    // MARK: - Panneau de contrôle (projo)
-
-    private static final float PANEL_W = 600, PANEL_PAD = 28, PANEL_TOP = SAFE_Y + 56 + 20;
-    private float panelBottom;
-
-    /** Sous la pastille : le son en large, quatre tuiles, puis les entrées. Mêmes surfaces et même focus que l'accueil. */
-    private void openPanel() {
-        panelCells.clear();
-        float x0 = W - SAFE_X - PANEL_W + PANEL_PAD, x1 = W - SAFE_X - PANEL_PAD, y = PANEL_TOP + PANEL_PAD;
-        float half = (x1 - x0 - 16) / 2;
-        panelCell(C_VOLUME, "Son", "speaker", null, x0, y, x1, y + 96);
-        y += 96 + 16;
-        panelCell(C_SLEEP, "Veille", "moon", null, x0, y, x0 + half, y + 132);
-        // Mise au point, trapèze, luminosité : les réglages de XGIMI, on y mène.
-        panelCell(C_SETTINGS, "Projecteur", "settings", null, x1 - half, y, x1, y + 132);
-        y += 132 + 16;
-        panelCell(C_BLUETOOTH, "Bluetooth", "bluetooth", null, x0, y, x0 + half, y + 132);
-        panelCell(C_NETWORK, "Réseau", "wifi", null, x1 - half, y, x1, y + 132);
-        y += 132;
-        boolean any = false;
-        for (HomeApps.Item it : inputs) {
-            if (it.kind != HomeApps.INPUT || y + 150 > H - SAFE_Y) continue;
-            y += any ? 12 : 62;   // la première laisse la place de l'intertitre « Entrées »
-            any = true;
-            Cell c = panelCell(C_APP, it.label, "input", it, x0, y, x1, y + 76);
-            c.sub = it.connected ? "Branché" : "Rien de branché";
-            c.warm = it.connected;
-            y += 76;
-        }
-        panelBottom = y + PANEL_PAD;
-        readVolume();
-        panelIndex = 0;   // le son : ce qu'on vient régler le plus souvent
-        panel = true;
-        invalidate();
-    }
-
-    private Cell panelCell(int kind, String title, String icon, HomeApps.Item item, float l, float t, float r, float b) {
-        Cell c = new Cell();
-        c.kind = kind;
-        c.title = title;
-        c.icon = icon;
-        c.item = item;
-        c.radius = 24;
-        c.r.set(l, t, r, b);
-        panelCells.add(c);
-        return c;
-    }
-
-    /** La tuile la plus proche dans la direction donnée, ou -1 (le bord du panneau). */
-    private int panelNext(int dx, int dy) {
-        RectF from = panelCells.get(panelIndex).r;
-        int best = -1;
-        float bestD = Float.MAX_VALUE;
-        for (int i = 0; i < panelCells.size(); i++) {
-            RectF to = panelCells.get(i).r;
-            float along = dx != 0 ? (to.centerX() - from.centerX()) * dx : (to.centerY() - from.centerY()) * dy;
-            // De côté : seulement une tuile de la même ligne. En vertical : celle du dessous/dessus la plus alignée (bord gauche d'abord).
-            if (along <= 1 || (dx != 0 && Math.abs(to.centerY() - from.centerY()) > 1)) continue;
-            float d = along + (dy != 0 ? Math.abs(to.left - from.left) * 0.5f : 0);
-            if (d < bestD) { bestD = d; best = i; }
-        }
-        return best;
-    }
-
-    /** La roue crantée : ouvre le panneau (ou le referme), quel que soit l'écran en cours. */
-    void togglePanel() {
-        if (!projo) return;
-        sheet = head = false;
-        if (panel) closePanel(); else openPanel();
-    }
-
-    private void closePanel() {
-        panel = false;
-        invalidate();
-    }
-
-    private float volume;   // 0..1, lu à l'ouverture du panneau et après chaque réglage (pas à chaque image)
-
-    private void readVolume() {
-        android.media.AudioManager am = audio();
-        int max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC);
-        volume = max > 0 ? (float) am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) / max : 0;
-    }
-
-    private android.media.AudioManager audio() {
-        return (android.media.AudioManager) activity.getSystemService(Context.AUDIO_SERVICE);
-    }
-
-    private void settings(String action, Cell c) {
-        try {
-            activity.startActivity(new Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-        } catch (RuntimeException e) {   // pas d'écran dédié sur ce firmware : les réglages complets
-            HomeApps.Item it = new HomeApps.Item();
-            it.kind = HomeApps.ANDROID_SETTINGS;
-            it.label = c.title;
-            HomeApps.open(activity, it, this, 0, 0, 1, 1);
-        }
+    PanelView panel() {
+        return panel;
     }
 
     private Cell quickCell(int kind, float x, float y, String title, String icon) {
@@ -589,6 +494,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     // MARK: - Touches
 
     boolean onKey(KeyEvent e) {
+        if (panel.isOpen()) return panel.key(e);
         boolean ok = e.getKeyCode() == KeyEvent.KEYCODE_DPAD_CENTER || e.getKeyCode() == KeyEvent.KEYCODE_ENTER
                 || e.getKeyCode() == KeyEvent.KEYCODE_NUMPAD_ENTER;
         if (e.getAction() == KeyEvent.ACTION_UP && ok && okDown) {
@@ -631,12 +537,10 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 return true;
             case KeyEvent.KEYCODE_MENU:
                 if (!projo || sheet) return false;
-                if (panel) closePanel(); else openPanel();
+                panel.open();
                 return true;
             case KeyEvent.KEYCODE_BACK:
-                if (panel) {
-                    closePanel();
-                } else if (sheet) {
+                if (sheet) {
                     sheet = false;
                     snapFocus();
                     invalidate();
@@ -655,16 +559,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
 
     private void move(int dx, int dy, boolean held) {
         touched = true;
-        if (panel) {
-            Cell f = focused();
-            int next = panelNext(dx, dy);
-            if (dx != 0 && f != null && f.kind == C_VOLUME) {
-                audio().adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC,
-                        dx > 0 ? android.media.AudioManager.ADJUST_RAISE : android.media.AudioManager.ADJUST_LOWER, 0);
-                readVolume();
-            } else if (next >= 0) panelIndex = next;
-            else if (dx < 0 || dy < 0) closePanel();   // sortir par la gauche ou par le haut referme
-        } else if (head) {
+        if (head) {        } else if (head) {
             if (dy > 0) head = false;
         } else if (sheet) {
             int cols = 7, n = sheetCells.size();
@@ -709,7 +604,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     }
 
     private Cell focused() {
-        if (panel) return panelIndex < panelCells.size() ? panelCells.get(panelIndex) : null;
         if (head) return headCell;
         if (sheet) return sheetIndex < sheetCells.size() ? sheetCells.get(sheetIndex) : null;
         if (row >= rows.size() || rows.get(row).isEmpty()) return null;
@@ -742,29 +636,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 openSheet("Toutes les apps", allApps);
                 break;
             case C_CONTROL:
-                openPanel();
-                break;
-            case C_SLEEP: {
-                closePanel();
-                Context app = activity.getApplicationContext();
-                new Thread(() -> {   // la touche Veille, par l'ADB local (une appli n'a pas le droit de l'envoyer)
-                    try (Adb adb = Adb.connect(app, 5_000, null)) {
-                        adb.shell("input keyevent 223");
-                    } catch (java.io.IOException e) {
-                        AppLog.w("veille : " + e.getMessage());
-                    }
-                }, "veille").start();
-                break;
-            }
-            case C_BLUETOOTH:
-                // Pas d'écran Bluetooth sur Google TV : celui qui appaire un accessoire (télécommande, enceinte).
-                settings("com.google.android.intent.action.CONNECT_INPUT", c);
-                break;
-            case C_NETWORK:
-                settings(android.provider.Settings.ACTION_WIFI_SETTINGS, c);
-                break;
-            case C_INPUTS:
-                openSheet("Entrées", inputs);
+                panel.open();
                 break;
             case C_SETTINGS: {
                 HomeApps.Item it = new HomeApps.Item();
@@ -843,11 +715,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             c.f = target > c.f ? Math.min(target, c.f + step) : Math.max(target, c.f - step);
             moving = true;
         }
-        float open = panel ? 1 : 0;
-        if (panelF != open) {
-            panelF = open > panelF ? Math.min(1, panelF + dt / 220) : Math.max(0, panelF - dt / 220);
-            moving = true;
-        }
         if (!moving) lastFrame = 0;
         return moving;
     }
@@ -856,7 +723,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         List<Cell> all = new ArrayList<>();
         for (List<Cell> r : rows) all.addAll(r);
         all.add(headCell);
-        all.addAll(panelCells);
         return all;
     }
 
@@ -1291,7 +1157,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 meta.setTextSize(24);
             }
         }
-        if (panelF > 0) drawPanel(c);
     }
 
     /** Une carte de « Ce soir » : l'image, la jauge dedans, le titre dessous (le détail est en haut de l'écran). */
@@ -1309,62 +1174,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         boolean ask = cell == removing;
         meta.setColor(ask ? WARM : f > 0.5f ? ink : muted);
         c.drawText(ask ? "Retirer ? OK · Retour" : ellipsize(cell.title == null ? "" : cell.title, meta, 320), cell.r.left, cell.r.bottom + 44, meta);
-    }
-
-    private void drawPanel(Canvas c) {
-        float e = ease(panelF);
-        c.save();   // pas de voile sur l'accueil derrière : un plein écran en transparence coûte ~7 ms par image ici
-        c.translate((1 - e) * (PANEL_W + SAFE_X + 8), 0);   // il glisse depuis le bord droit : pas de calque
-        tmp2.set(W - SAFE_X - PANEL_W, PANEL_TOP, W - SAFE_X, panelBottom);
-        fill.setColor(0xFF0A161D);
-        c.drawRoundRect(tmp2, 36, 36, fill);
-        stroke.setStrokeWidth(1.5f);
-        stroke.setColor(0x24EEF3F6);
-        c.drawRoundRect(tmp2, 36, 36, stroke);
-        boolean label = false;
-        for (Cell cell : panelCells) {
-            RectF r = cell.r;
-            float f = ease(cell.f);
-            if (cell.kind == C_APP && !label) {
-                label = true;
-                section.setColor(muted);
-                c.drawText("ENTRÉES", r.left + 4, r.top - 22, section);
-            }
-            if (f > 0) drawFocus(c, r, cell.radius, f);
-            fill.setColor(0x12EEF3F6);
-            c.drawRoundRect(r, cell.radius, cell.radius, fill);
-            if (f > 0) {
-                fill.setColor(Ui.alpha(0x1FEEF3F6, f));
-                c.drawRoundRect(r, cell.radius, cell.radius, fill);
-            }
-            int icon = f > 0.5f ? ink : ink2;
-            tile.setColor(ink);
-            if (cell.kind == C_VOLUME) {
-                drawIcon(c, cell.icon, r.left + 24 + 16, r.top + 36, 32, icon);
-                c.drawText(cell.title, r.left + 24 + 32 + 16, r.top + 36 + Ui.cap(tile) / 2, tile);
-                String pct = Math.round(volume * 100) + " %";
-                section.setColor(ink2);
-                c.drawText(pct, r.right - 24 - section.measureText(pct), r.top + 36 + Ui.cap(section) / 2, section);
-                float x0 = r.left + 24, x1 = r.right - 24, y = r.bottom - 22;
-                fill.setColor(0x2EEEF3F6);
-                tmp2.set(x0, y - 6, x1, y);
-                c.drawRoundRect(tmp2, 3, 3, fill);
-                fill.setColor(ink);
-                tmp2.set(x0, y - 6, x0 + (x1 - x0) * volume, y);
-                c.drawRoundRect(tmp2, 3, 3, fill);
-            } else if (cell.kind == C_APP) {
-                drawIcon(c, cell.icon, r.left + 24 + 16, r.centerY(), 32, icon);
-                c.drawText(ellipsize(cell.title, tile, 260), r.left + 24 + 32 + 16, r.centerY() + Ui.cap(tile) / 2, tile);
-                meta.setTextSize(22);
-                meta.setColor(cell.warm ? WARM : muted);
-                c.drawText(cell.sub, r.right - 24 - meta.measureText(cell.sub), r.centerY() + Ui.cap(meta) / 2, meta);
-                meta.setTextSize(24);
-            } else {   // tuile : le pictogramme en haut, le nom en bas
-                drawIcon(c, cell.icon, r.left + 24 + 18, r.top + 24 + 18, 36, icon);
-                c.drawText(cell.title, r.left + 24, r.bottom - 26, tile);
-            }
-        }
-        c.restore();
     }
 
     private void drawQuick(Canvas c, Cell cell, float f) {
@@ -1413,7 +1222,20 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     // MARK: - Pictogrammes (trait 1,8 sur 24, repris de maquette.html)
 
     private void drawIcon(Canvas c, String name, float cx, float cy, float size, int color) {
+        icon(c, name, cx, cy, size, color);
+    }
+
+    private static final Paint ICON_STROKE = new Paint(Paint.ANTI_ALIAS_FLAG), ICON_FILL = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final Path ICON_PATH = new Path();
+    private static final RectF ICON_RECT = new RectF();
+    static { ICON_STROKE.setStyle(Paint.Style.STROKE); }
+
+    /** Fil d'affichage seulement (pinceaux partagés). */
+    static void icon(Canvas c, String name, float cx, float cy, float size, int color) {
         if (name == null) return;
+        Paint stroke = ICON_STROKE, fill = ICON_FILL;
+        Path path = ICON_PATH;
+        RectF tmp2 = ICON_RECT;
         float s = size / 24;
         c.save();
         c.translate(cx - 12 * s, cy - 12 * s);
