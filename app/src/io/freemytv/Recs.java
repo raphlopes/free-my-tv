@@ -198,7 +198,7 @@ final class Recs {
         if (!hasKey(context)) return list;    // no TMDB key: no recommendations
         Map<String, Boolean> have = new HashMap<>();   // one look per app, not per title (this runs every 15 s)
         for (Pick p : picks) {
-            if ((kind == null || kind.equals(p.kind)) && (hidden == null || !hidden.contains(p.id))
+            if ((kind == null || kind.equals(p.kind))
                     && (!p.detailed || (p.pkg != null && have.computeIfAbsent(p.pkg, this::installed)))) list.add(p);   // app missing: skip
         }
         if (list.isEmpty()) return list;
@@ -208,6 +208,7 @@ final class Recs {
         java.util.Set<String> seen = new java.util.HashSet<>();
         for (int i = 0; i < list.size() && out.size() < max; i++) {
             Pick p = list.get((int) ((hour * 3 + i) % list.size()));
+            if (hidden != null && hidden.contains(p.id)) continue;   // retirée : on saute, sans décaler toute la rangée
             if (seen.add(franchise(p.title))) out.add(p);
         }
         return out;
