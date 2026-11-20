@@ -87,6 +87,8 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     private final List<String> rowTitles = new ArrayList<>();
     private int row, col;
     private boolean running;
+    private Cell removing;     // carte Reprendre en attente de confirmation (appui long sur OK)
+    private boolean okDown;    // OK enfoncé sur une carte Reprendre : on n'ouvre qu'au relâchement, si ce n'était pas un appui long
     private boolean touched;   // faux tant que personne n'a bougé : le focus suit alors le premier élément (Reprendre)
 
     // Écran « Toutes les apps » / « Entrées »
@@ -480,6 +482,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             y += 76;
         }
         panelBottom = y + PANEL_PAD;
+        readVolume();
         panelIndex = 0;   // le son : ce qu'on vient régler le plus souvent
         panel = true;
         invalidate();
@@ -513,9 +516,24 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         return best;
     }
 
+    /** La roue crantée : ouvre le panneau (ou le referme), quel que soit l'écran en cours. */
+    void togglePanel() {
+        if (!projo) return;
+        sheet = head = false;
+        if (panel) closePanel(); else openPanel();
+    }
+
     private void closePanel() {
         panel = false;
         invalidate();
+    }
+
+    private float volume;   // 0..1, lu à l'ouverture du panneau et après chaque réglage (pas à chaque image)
+
+    private void readVolume() {
+        android.media.AudioManager am = audio();
+        int max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC);
+        volume = max > 0 ? (float) am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) / max : 0;
     }
 
     private android.media.AudioManager audio() {
@@ -571,8 +589,36 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     // MARK: - Touches
 
     boolean onKey(KeyEvent e) {
+        boolean ok = e.getKeyCode() == KeyEvent.KEYCODE_DPAD_CENTER || e.getKeyCode() == KeyEvent.KEYCODE_ENTER
+                || e.getKeyCode() == KeyEvent.KEYCODE_NUMPAD_ENTER;
+        if (e.getAction() == KeyEvent.ACTION_UP && ok && okDown) {
+            okDown = false;
+            activate();
+            return true;
+        }
         if (e.getAction() != KeyEvent.ACTION_DOWN) return isOurs(e.getKeyCode());
         boolean held = e.getRepeatCount() > 0;
+        Cell at = focused();
+        if (ok && at != null && at.kind == C_RESUME) {
+            if (!held && removing == at) {   // confirmation
+                Maison.hide(activity, at.resume);
+                resumes.remove(at.resume);
+                removing = null;
+                rebuild();
+            } else if (!held) {
+                okDown = true;
+            } else if (okDown && e.isLongPress()) {
+                okDown = false;
+                removing = at;
+                invalidate();
+            }
+            return true;
+        }
+        if (removing != null) {   // toute autre touche : on garde
+            removing = null;
+            invalidate();
+            if (e.getKeyCode() == KeyEvent.KEYCODE_BACK) return true;
+        }
         switch (e.getKeyCode()) {
             case KeyEvent.KEYCODE_DPAD_LEFT: move(-1, 0, held); return true;
             case KeyEvent.KEYCODE_DPAD_RIGHT: move(1, 0, held); return true;
@@ -612,10 +658,11 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         if (panel) {
             Cell f = focused();
             int next = panelNext(dx, dy);
-            if (dx != 0 && f != null && f.kind == C_VOLUME)
+            if (dx != 0 && f != null && f.kind == C_VOLUME) {
                 audio().adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC,
                         dx > 0 ? android.media.AudioManager.ADJUST_RAISE : android.media.AudioManager.ADJUST_LOWER, 0);
-            else if (next >= 0) panelIndex = next;
+                readVolume();
+            } else if (next >= 0) panelIndex = next;
             else if (dx < 0 || dy < 0) closePanel();   // sortir par la gauche ou par le haut referme
         } else if (head) {
             if (dy > 0) head = false;
@@ -870,8 +917,10 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             // Le focus d'abord en dessous, l'élément focalisé dessiné en dernier (il grandit sur ses voisins).
             Cell top = null;
             for (Cell cell : cells) {
-                if (cell.f > 0 && (top == null || cell.f > top.f)) top = cell;
-                else drawCell(c, cell);
+                if (cell.f > 0 && (top == null || cell.f > top.f)) {
+                    if (top != null) drawCell(c, top);   // celui qu'on quitte reste dessiné (sinon il clignote)
+                    top = cell;
+                } else drawCell(c, cell);
             }
             if (top != null) drawCell(c, top);
         }
@@ -969,9 +1018,14 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     private final RectF tmp2 = new RectF();
     private static final float SHEET_STEP = 123 + 96;   // une rangée d'apps + son nom sous le focus
 
+    private static final int WIDE = 1104;
+
+    private static String wideUri(Maison.Resume r, boolean wide) {
+        return wide && r.wide != null ? r.wide : r.image;
+    }
+
     private Bitmap imageOf(Cell cell, boolean wide) {
-        if (cell.resume != null) return Maison.image(getContext(), wide && cell.resume.wide != null ? cell.resume.wide : cell.resume.image,
-                wide ? 1104 : 640, this::invalidate);
+        if (cell.resume != null) return Maison.image(getContext(), wideUri(cell.resume, wide), wide ? WIDE : projo ? 352 : 640, this::invalidate);
         if (cell.pick != null) {
             Backdrop b = recs.backdrop(cell.pick);
             return b == null ? null : wide ? b.wide : b.tall;
@@ -1133,7 +1187,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     // Le fond d'un titre : l'image et ses deux voiles, composés une fois à mi-résolution hors du fil d'affichage. Dessiner
     // l'image puis deux dégradés plein écran à chaque image coûtait 25 ms sur le projo (mesuré le 20/11).
     private final java.util.LinkedHashMap<String, Bitmap> backdrops = new java.util.LinkedHashMap<String, Bitmap>(8, 0.75f, true) {
-        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, Bitmap> e) { return size() > 5; }
+        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, Bitmap> e) { return size() > 3; }
     };
     private final Set<String> composing = new HashSet<>();
     private Bitmap lastBackdrop;
@@ -1145,7 +1199,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         Bitmap src = imageOf(cell, true);
         if (src == null) return null;
         composing.add(key);
-        String raw = cell.resume != null ? cell.resume.wide : null;
+        String raw = cell.resume != null ? wideUri(cell.resume, true) : null;
         new Thread(() -> {
             Bitmap out = null;
             try {
@@ -1174,7 +1228,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 composing.remove(key);
                 if (done == null) return;
                 backdrops.put(key, done);
-                if (raw != null) Maison.forget(raw);   // la grande image ne sert plus : seul le fond composé reste
+                if (raw != null) Maison.forget(raw, WIDE);   // la grande image ne sert plus : seul le fond composé reste
                 invalidate();
             });
         }, "maison-fond").start();
@@ -1221,18 +1275,20 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             }
             Cell top = null;   // l'élément focalisé en dernier : il grandit sur ses voisins
             for (Cell cell : cells) {
-                if (cell.f > 0 && (top == null || cell.f > top.f)) top = cell;
-                else drawCell(c, cell);
+                if (cell.f > 0 && (top == null || cell.f > top.f)) {
+                    if (top != null) drawCell(c, top);   // celui qu'on quitte reste dessiné (sinon il clignote)
+                    top = cell;
+                } else drawCell(c, cell);
             }
             if (top != null) {
                 drawCell(c, top);
-                if (top.kind == C_APP && !top.frame) {   // dock : le nom de l'app focalisée, sous sa tuile
-                    String name = top.item.label;
-                    meta.setTextSize(22);
-                    meta.setColor(Ui.alpha(ink, ease(top.f)));
-                    c.drawText(ellipsize(name, meta, DOCK_W), top.r.left, top.r.bottom + 38, meta);
-                    meta.setTextSize(24);
-                }
+            }
+            for (Cell cell : cells) {   // dock : le nom de l'app focalisée sous sa tuile, en fondu croisé
+                if (cell.frame || cell.kind != C_APP || cell.f <= 0) continue;
+                meta.setTextSize(22);
+                meta.setColor(Ui.alpha(ink, cell.f * cell.f));
+                c.drawText(ellipsize(cell.item.label, meta, DOCK_W), cell.r.left, cell.r.bottom + 38, meta);
+                meta.setTextSize(24);
             }
         }
         if (panelF > 0) drawPanel(c);
@@ -1250,8 +1306,9 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             tmp2.set(x0, y - 5, x0 + (x1 - x0) * cell.resume.progress, y);
             c.drawRoundRect(tmp2, 2.5f, 2.5f, fill);
         }
-        meta.setColor(f > 0.5f ? ink : muted);
-        c.drawText(ellipsize(cell.title == null ? "" : cell.title, meta, 320), cell.r.left, cell.r.bottom + 44, meta);
+        boolean ask = cell == removing;
+        meta.setColor(ask ? WARM : f > 0.5f ? ink : muted);
+        c.drawText(ask ? "Retirer ? OK · Retour" : ellipsize(cell.title == null ? "" : cell.title, meta, 320), cell.r.left, cell.r.bottom + 44, meta);
     }
 
     private void drawPanel(Canvas c) {
@@ -1264,9 +1321,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         stroke.setStrokeWidth(1.5f);
         stroke.setColor(0x24EEF3F6);
         c.drawRoundRect(tmp2, 36, 36, stroke);
-        android.media.AudioManager am = audio();
-        int max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC);
-        float volume = max > 0 ? (float) am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) / max : 0;
         boolean label = false;
         for (Cell cell : panelCells) {
             RectF r = cell.r;
@@ -1339,8 +1393,10 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         Cell top = null;
         for (Cell cell : sheetCells) {
             if (cell.r.bottom - shift < SAFE_Y + 80 || cell.r.top - shift > H) continue;
-            if (cell.f > 0 && (top == null || cell.f > top.f)) top = cell;
-            else drawSheetCell(c, cell);
+            if (cell.f > 0 && (top == null || cell.f > top.f)) {
+                if (top != null) drawSheetCell(c, top);
+                top = cell;
+            } else drawSheetCell(c, cell);
         }
         if (top != null) drawSheetCell(c, top);
         c.restore();

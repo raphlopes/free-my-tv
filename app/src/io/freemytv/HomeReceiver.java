@@ -11,9 +11,11 @@ public class HomeReceiver extends BroadcastReceiver {
         if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
             HomeMode.bootCheck(context);
             Maison.keepGoogleHomeOff(context);   // projo : réactivé au démarrage, il prendrait la touche Accueil
+            HomeMode.gearService(context);
         } else if (Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
             HomeMode.verify(context);   // app updated: complete Free My TV mode if something is missing
             HomeMode.ensureRemoteService(context, 3_000);
+            HomeMode.gearService(context);
         }
     }
 }

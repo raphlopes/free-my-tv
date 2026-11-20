@@ -128,10 +128,27 @@ final class Maison {
             TvContract.WatchNextPrograms.COLUMN_BROWSABLE,
     };
 
+    /** Ce qui désigne un titre retiré de Reprendre : l'épisode pour Stremio (le suivant reviendra), le titre ailleurs. */
+    private static String hideKey(Resume r) {
+        return STREMIO.equals(r.pkg) ? r.intentUri : r.pkg + "\n" + r.title;
+    }
+
+    private static Set<String> hidden(Context c) {
+        return c.getSharedPreferences("maison", Context.MODE_PRIVATE).getStringSet("hidden", Collections.emptySet());
+    }
+
+    /** Retire un titre de Reprendre, ici seulement : l'appli d'origine garde sa propre liste. */
+    // shortcut: la liste ne se vide jamais et rien ne permet de remettre un titre ; à revoir si ça gêne.
+    static void hide(Context c, Resume r) {
+        Set<String> all = new HashSet<>(hidden(c));
+        all.add(hideKey(r));
+        c.getSharedPreferences("maison", Context.MODE_PRIVATE).edit().putStringSet("hidden", all).apply();
+    }
+
     /** La file « Reprendre », la plus récente d'abord. Vide sans READ_TV_LISTINGS (on ne voit alors que nos lignes). */
     static List<Resume> resume(Context c, int max) {
         List<Resume> out = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
+        Set<String> seen = new HashSet<>(), hidden = hidden(c);
         try (Cursor cur = c.getContentResolver().query(TvContract.WatchNextPrograms.CONTENT_URI, COLS, null, null,
                 TvContract.WatchNextPrograms.COLUMN_LAST_ENGAGEMENT_TIME_UTC_MILLIS + " DESC")) {
             if (cur == null) return out;
@@ -142,7 +159,7 @@ final class Maison {
                 r.title = cur.getString(1);
                 r.intentUri = cur.getString(5);
                 if (r.pkg == null || r.title == null || r.intentUri == null || r.pkg.equals(c.getPackageName())) continue;
-                if (!seen.add(r.pkg + "\n" + r.title)) continue;   // une série = une carte, son dernier épisode
+                if (!seen.add(r.pkg + "\n" + r.title) || hidden.contains(hideKey(r))) continue;   // une série = une carte, son dernier épisode
                 String episode = cur.getString(2), season = cur.getString(3), number = cur.getString(4);
                 StringBuilder meta = new StringBuilder();
                 if (season != null && !season.isEmpty()) meta.append("Saison").append(' ').append(season);
@@ -171,7 +188,7 @@ final class Maison {
             for (Resume r : st) titles.add(r.title.toLowerCase(java.util.Locale.ROOT));
             out.removeIf(r -> STREMIO.equals(r.pkg) || titles.contains(r.title.toLowerCase(java.util.Locale.ROOT)));
             for (Resume r : st) r.app = HomeApps.launchIntent(c.getPackageManager(), STREMIO) != null ? "Stremio" : null;
-            out.addAll(st);
+            for (Resume r : st) if (!hidden.contains(hideKey(r))) out.add(r);
             out.sort((a, b) -> Long.compare(b.engaged, a.engaged));
             while (out.size() > max) out.remove(out.size() - 1);
         }
@@ -435,8 +452,9 @@ final class Maison {
     /** L'image si elle est prête ; sinon la charge en fond (à la taille demandée) et appelle `ready` ensuite. */
     static Bitmap image(Context c, String uri, int width, Runnable ready) {
         if (uri == null) return null;
-        Bitmap b = IMAGES.get(uri);
-        if (b != null || !LOADING.add(uri)) return b;
+        String key = uri + "#" + width;   // la même image sert en carte (petite) et en fond (grande)
+        Bitmap b = IMAGES.get(key);
+        if (b != null || !LOADING.add(key)) return b;
         ContentResolver cr = c.getContentResolver();
         io.execute(() -> {
             try {
@@ -449,20 +467,20 @@ final class Maison {
                 while (o.outWidth / (o.inSampleSize * 2) >= width) o.inSampleSize *= 2;
                 Bitmap img = BitmapFactory.decodeByteArray(data, 0, data.length, o);
                 if (img != null) {
-                    IMAGES.put(uri, img);
+                    IMAGES.put(key, img);
                     main.post(ready);
                 }
             } catch (IOException | RuntimeException | OutOfMemoryError e) {
                 AppLog.w("image reprendre : " + e.getMessage());
             } finally {
-                LOADING.remove(uri);
+                LOADING.remove(key);
             }
         });
         return null;
     }
 
-    static void forget(String uri) {
-        IMAGES.remove(uri);
+    static void forget(String uri, int width) {
+        IMAGES.remove(uri + "#" + width);
     }
 
     private static byte[] read(ContentResolver cr, String uri) throws IOException {
