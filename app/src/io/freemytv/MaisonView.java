@@ -105,6 +105,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     private List<Cell> tonight = new ArrayList<>();
     private Cell shelf;            // le titre mis en avant : le dernier contenu focalisé (fond et texte du haut)
     private float dockRight;
+    private float tonightScroll;   // défilement de « Ce soir » (px maquette), animé vers la carte focalisée
 
     // Données
     private List<Maison.Resume> resumes = new ArrayList<>();
@@ -432,7 +433,8 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         // En haut, le titre mis en avant sur son image ; puis « Ce soir » (reprises, puis suggestions) ; puis le dock des apps.
         tonight = new ArrayList<>();
         for (Maison.Resume r : resumes) if (tonight.size() < 5) tonight.add(resumeCell(r));
-        for (Recs.Pick p : picks) if (tonight.size() < 5) tonight.add(pickCell(p));
+        int room = tonight.size() + 5;   // puis jusqu'à cinq suggestions : la rangée défile
+        for (Recs.Pick p : picks) if (tonight.size() < room) tonight.add(pickCell(p));
         if (!tonight.isEmpty()) {
             float x = SAFE_X;
             for (Cell c : tonight) {
@@ -631,6 +633,8 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 }
                 RectF from = rows.get(row).get(col).r;
                 float cx = from.left + Math.min(from.width(), 219) / 2;   // depuis le héros : la première app, pas celle du milieu
+                if (projo && tonight.contains(rows.get(row).get(col))) cx -= tonightScroll;   // position à l'écran
+                else if (projo && rows.get(next) == tonight) cx += tonightScroll;
                 row = next;
                 col = nearest(rows.get(row), cx);
             }
@@ -770,6 +774,15 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             c.f = target > c.f ? Math.min(target, c.f + step) : Math.max(target, c.f - step);
             moving = true;
         }
+        float want = tonightScroll;
+        if (projo && f != null && tonight.contains(f)) {   // la carte focalisée entière à l'écran
+            if (f.r.right - want > W - SAFE_X) want = f.r.right - (W - SAFE_X);
+            if (f.r.left - want < SAFE_X) want = f.r.left - SAFE_X;
+        } else if (tonight.isEmpty()) want = 0;
+        if (Math.abs(want - tonightScroll) > 0.5f) {
+            tonightScroll += (want - tonightScroll) * Math.min(1, dt / 110);
+            moving = true;
+        } else tonightScroll = want;
         if (!moving) lastFrame = 0;
         return moving;
     }
@@ -945,8 +958,18 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         return wide && r.wide != null ? r.wide : r.image;
     }
 
+    private static String pickUri(Recs.Pick p, boolean wide) {
+        return p.backdrop == null ? null : "https://image.tmdb.org/t/p/" + (wide ? "w1280" : "w780") + p.backdrop;
+    }
+
     private Bitmap imageOf(Cell cell, boolean wide) {
         if (cell.resume != null) return Maison.image(getContext(), wideUri(cell.resume, wide), wide ? WIDE : projo ? 352 : 640, this::invalidate);
+        if (cell.pick != null && projo) {
+            // Projo : l'image TMDB telle quelle. Le Backdrop de l'amont (plein écran + versions floutées, 4 en cache)
+            // pèse trop ici et tourne en rond dès qu'il y a cinq suggestions.
+            String uri = pickUri(cell.pick, wide);
+            return uri == null ? null : Maison.image(getContext(), uri, wide ? WIDE : 352, this::invalidate);
+        }
         if (cell.pick != null) {
             Backdrop b = recs.backdrop(cell.pick);
             return b == null ? null : wide ? b.wide : b.tall;
@@ -1120,7 +1143,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         Bitmap src = imageOf(cell, true);
         if (src == null) return null;
         composing.add(key);
-        String raw = cell.resume != null ? wideUri(cell.resume, true) : null;
+        String raw = cell.resume != null ? wideUri(cell.resume, true) : cell.pick != null && projo ? pickUri(cell.pick, true) : null;
         new Thread(() -> {
             Bitmap out = null;
             try {
@@ -1194,6 +1217,11 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 section.setColor(muted);
                 c.drawText(title.toUpperCase(java.util.Locale.ROOT), SAFE_X, cells.get(0).r.top - 28, section);
             }
+            boolean scrolls = cells == tonight;
+            if (scrolls) {
+                c.save();
+                c.translate(-tonightScroll, 0);
+            }
             Cell top = null;   // l'élément focalisé en dernier : il grandit sur ses voisins
             for (Cell cell : cells) {
                 if (cell.f > 0 && (top == null || cell.f > top.f)) {
@@ -1204,6 +1232,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             if (top != null) {
                 drawCell(c, top);
             }
+            if (scrolls) c.restore();
             for (Cell cell : cells) {   // dock : le nom de l'app focalisée sous sa tuile, en fondu croisé
                 if (cell.frame || cell.kind != C_APP || cell.f <= 0) continue;
                 meta.setTextSize(22);
