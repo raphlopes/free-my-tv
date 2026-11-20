@@ -133,6 +133,19 @@ final class Maison {
         return STREMIO.equals(r.pkg) ? r.intentUri : r.pkg + "\n" + r.title;
     }
 
+    static void hidePick(Context c, int id) {
+        Set<String> all = new HashSet<>(hidden(c));
+        all.add("pick:" + id);
+        c.getSharedPreferences("maison", Context.MODE_PRIVATE).edit().putStringSet("hidden", all).apply();
+    }
+
+    /** Les suggestions retirées (ids TMDB). */
+    static Set<Integer> hiddenPicks(Context c) {
+        Set<Integer> out = new HashSet<>();
+        for (String k : hidden(c)) if (k.startsWith("pick:")) out.add(Integer.parseInt(k.substring(5)));
+        return out;
+    }
+
     private static Set<String> hidden(Context c) {
         return c.getSharedPreferences("maison", Context.MODE_PRIVATE).getStringSet("hidden", Collections.emptySet());
     }

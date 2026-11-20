@@ -189,11 +189,16 @@ final class Recs {
 
     /** This hour's 3, movies only ("movie") or shows only ("tv"); null = both (the home screen tabs). */
     List<Pick> now(String kind) {
+        return now(kind, 3, null);
+    }
+
+    /** Maison : jusqu'à `max` suggestions de l'heure, sans celles que l'utilisateur a retirées (ids TMDB). */
+    List<Pick> now(String kind, int max, java.util.Set<Integer> hidden) {
         List<Pick> list = new ArrayList<>();
         if (!hasKey(context)) return list;    // no TMDB key: no recommendations
         Map<String, Boolean> have = new HashMap<>();   // one look per app, not per title (this runs every 15 s)
         for (Pick p : picks) {
-            if ((kind == null || kind.equals(p.kind))
+            if ((kind == null || kind.equals(p.kind)) && (hidden == null || !hidden.contains(p.id))
                     && (!p.detailed || (p.pkg != null && have.computeIfAbsent(p.pkg, this::installed)))) list.add(p);   // app missing: skip
         }
         if (list.isEmpty()) return list;
@@ -201,11 +206,32 @@ final class Recs {
         // Three per hour, never two from the same franchise ("Law & Order" and "Law & Order: Special…").
         List<Pick> out = new ArrayList<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
-        for (int i = 0; i < list.size() && out.size() < 3; i++) {
+        for (int i = 0; i < list.size() && out.size() < max; i++) {
             Pick p = list.get((int) ((hour * 3 + i) % list.size()));
             if (seen.add(franchise(p.title))) out.add(p);
         }
         return out;
+    }
+
+    private final Map<Integer, String> imdb = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** L'identifiant IMDb du titre (« tt… », ce que Stremio attend), ou null ; `done` est appelé hors du fil principal. */
+    void imdb(Pick p, java.util.function.Consumer<String> done) {
+        String known = imdb.get(p.id);
+        if (known != null) {
+            done.accept(known);
+            return;
+        }
+        io.execute(() -> {
+            String id = null;
+            try {
+                id = get("/" + p.kind + "/" + p.id + "/external_ids").optString("imdb_id", null);
+                if (id != null && id.startsWith("tt")) imdb.put(p.id, id); else id = null;
+            } catch (IOException | org.json.JSONException e) {
+                AppLog.w("imdb : " + e.getMessage());
+            }
+            done.accept(id);
+        });
     }
 
     /** "Law & Order: Special Victims Unit" → "law & order" (what comes before ":" or " - "). */

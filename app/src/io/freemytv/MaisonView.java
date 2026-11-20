@@ -294,7 +294,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         String wasKey = key(was);
         rows.clear();
         rowTitles.clear();
-        List<Recs.Pick> picks = recs.now();
+        List<Recs.Pick> picks = projo ? recs.now(null, 5, Maison.hiddenPicks(activity)) : recs.now();
         if (projo) buildProjo(picks); else buildTv(picks);
         for (List<Cell> r : rows) for (Cell c : r) {   // un retour en cours (« Lancé ») survit à la reconstruction
             Cell o = old.get(key(c));
@@ -544,17 +544,19 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             return true;
         }
         Cell at = focused();
-        if (ok && at != null && (at.kind == C_RESUME || (projo && at.kind == C_APP && at.item.kind == HomeApps.APP))) {
+        if (ok && at != null && (at.kind == C_RESUME || (projo && at.kind == C_PICK) || (projo && at.kind == C_APP && at.item.kind == HomeApps.APP))) {
             if (!held && removing == at) {   // confirmation
-                Maison.hide(activity, at.resume);
-                resumes.remove(at.resume);
+                if (at.resume != null) {
+                    Maison.hide(activity, at.resume);
+                    resumes.remove(at.resume);
+                } else Maison.hidePick(activity, at.pick.id);   // la suivante prend sa place
                 removing = null;
                 rebuild();
             } else if (!held) {
                 okDown = true;
             } else if (okDown && e.isLongPress()) {
                 okDown = false;
-                if (at.kind == C_RESUME) removing = at;
+                if (at.kind == C_RESUME || at.kind == C_PICK) removing = at;
                 else if (!sheet) movingApp = at.item.pkg;
                 else {   // « Toutes les apps » : épingle en tête du dock
                     apps.remove(at.item);
@@ -670,13 +672,19 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 break;
             case C_PICK:
                 if (HomeApps.launchIntent(activity.getPackageManager(), Maison.STREMIO) != null) {
-                    try {   // Stremio a tout : sa recherche sur le titre, plutôt que l'appli du service
-                        activity.startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("stremio:///search?search="
-                                + android.net.Uri.encode(c.pick.title))).setPackage(Maison.STREMIO).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                        break;
-                    } catch (RuntimeException e) {
-                        AppLog.w("suggestion : " + e.getMessage());
-                    }
+                    // Stremio a tout : sa fiche du titre (identifiant IMDb, demandé à TMDB) ; à défaut, sa recherche.
+                    Recs.Pick pick = c.pick;
+                    recs.imdb(pick, id -> handler.post(() -> {
+                        String uri = id == null ? "stremio:///search?search=" + android.net.Uri.encode(pick.title)
+                                : "movie".equals(pick.kind) ? "stremio:///detail/movie/" + id + "/" + id : "stremio:///detail/series/" + id;
+                        try {
+                            activity.startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri))
+                                    .setPackage(Maison.STREMIO).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                        } catch (RuntimeException e) {
+                            AppLog.w("suggestion : " + e.getMessage());
+                        }
+                    }));
+                    break;
                 }
                 if (c.pick.pkg == null || !HomeApps.open(activity, HomeApps.app(c.pick.pkg, Recs.serviceName(c.pick), c.pick.link), this, x, y, w, h))
                     note(c, "Impossible d'ouvrir", false);
