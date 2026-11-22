@@ -294,8 +294,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         String wasKey = key(was);
         rows.clear();
         rowTitles.clear();
-        List<Recs.Pick> picks = projo ? recs.now(null, 5, Maison.hiddenPicks(activity)) : recs.now();
-        if (projo) buildProjo(picks); else buildTv(picks);
+        buildProjo(recs.now(null, 5, Maison.hiddenPicks(activity)));
         for (List<Cell> r : rows) for (Cell c : r) {   // un retour en cours (« Lancé ») survit à la reconstruction
             Cell o = old.get(key(c));
             if (o != null) { c.note = o.note; c.noteOk = o.noteOk; c.noteUntil = o.noteUntil; }
@@ -316,115 +315,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         if (c.resume != null) return "res:" + c.resume.pkg + c.resume.title;
         if (c.pick != null) return "pick:" + c.pick.id;
         return "k:" + c.kind + c.action;
-    }
-
-    private void buildTv(List<Recs.Pick> picks) {
-        float y = SAFE_Y + 56 + 32;
-        // Héros : Reprendre d'abord ; sinon la première suggestion. Les affiches : les suggestions, puis la suite de Reprendre.
-        List<Cell> hero = new ArrayList<>();
-        int pickAt = 0, resumeAt = 0;
-        Cell h = null;
-        if (!resumes.isEmpty()) h = resumeCell(resumes.get(resumeAt++));
-        else if (!picks.isEmpty()) h = pickCell(picks.get(pickAt++));
-        if (h != null) {
-            h.hero = true;
-            h.radius = 24;
-            h.r.set(SAFE_X, y, SAFE_X + 1104, y + 420);
-            hero.add(h);
-            float x = SAFE_X + 1104 + GAP;
-            while (hero.size() < 3) {
-                Cell p = pickAt < picks.size() ? pickCell(picks.get(pickAt++))
-                        : resumeAt < resumes.size() ? resumeCell(resumes.get(resumeAt++)) : null;
-                if (p == null) break;
-                p.poster = true;
-                p.radius = 18;
-                p.r.set(x, y, x + 280, y + 420);
-                hero.add(p);
-                x += 280 + GAP;
-            }
-            addRow(null, hero);
-            y += 420 + 40;
-        } else {
-            // Rien à reprendre ni à suggérer (le cas courant) : Apps et Salon au milieu de la zone utile, pas collés en haut.
-            boolean salonRow = Maison.hasHub() || Sound.out() != null || !inputs.isEmpty();
-            float block = 26 + 30 + 123 + (salonRow ? 40 + 26 + 30 + 110 : 0);
-            y += Math.max(40, (H - SAFE_Y - y - block) / 2);
-        }
-        // Apps : 6 + « Toutes les apps »
-        List<Cell> appRow = new ArrayList<>();
-        float x = SAFE_X;
-        y += 26 + 30;   // titre de rangée, posé au-dessus du focus
-        for (HomeApps.Item it : apps) {
-            Cell c = new Cell();
-            c.kind = C_APP;
-            c.item = it;
-            c.radius = 18;
-            c.r.set(x, y, x + 219, y + 123);
-            appRow.add(c);
-            x += 219 + GAP;
-        }
-        Cell all = new Cell();
-        all.kind = C_ALL;
-        all.title = "Toutes les apps";
-        all.radius = 18;
-        all.r.set(x, y, x + 219, y + 123);
-        appRow.add(all);
-        addRow("Apps", appRow);
-        y += 123 + 40;
-        // Salon
-        List<Cell> salon = new ArrayList<>();
-        y += 26 + 30;   // titre de rangée, posé au-dessus du focus
-        x = SAFE_X;
-        if (Maison.hasHub()) {
-            x = salonCell(salon, x, y, "cinema", "Cinéma", "Lumières ambrées", "film");
-            x = salonCell(salon, x, y, "ambiance", "Ambiance", "Blanc chaud", "bulb");
-            x = salonCell(salon, x, y, "eteindre", "Tout éteindre", "Lumières du salon", "power");
-        }
-        if (Sound.out() != null) {
-            Cell s = tileCell(C_SOUND, x, y, "Son", Sound.OPTICAL.equals(Sound.out()) ? "Barre de son" : "Haut-parleurs TV", "speaker");
-            s.warm = Sound.OPTICAL.equals(Sound.out());
-            salon.add(s);
-            x += 320 + GAP;
-        }
-        if (!inputs.isEmpty()) {
-            salon.add(tileCell(C_INPUTS, x, y, "Entrées", inputsSummary(), "input"));
-        }
-        if (!salon.isEmpty()) addRow("Salon", salon);
-    }
-
-    private float salonCell(List<Cell> row, float x, float y, String action, String title, String sub, String icon) {
-        Cell c = tileCell(C_SALON, x, y, title, sub, icon);
-        c.action = action;
-        // La dernière scène lancée d'ici garde le point cantaloup, avec son heure : on ne connaît pas l'état réel des lampes.
-        long at = Maison.sceneAt(activity, action);
-        if (at > 0) {
-            c.warm = true;
-            c.sub = "Lancée à " + Ui.clock(at);
-        }
-        row.add(c);
-        return x + 320 + GAP;
-    }
-
-    private Cell tileCell(int kind, float x, float y, String title, String sub, String icon) {
-        Cell c = new Cell();
-        c.kind = kind;
-        c.title = title;
-        c.sub = sub;
-        c.icon = icon;
-        c.radius = 18;
-        c.r.set(x, y, x + 320, y + 110);
-        return c;
-    }
-
-    private String inputsSummary() {
-        StringBuilder s = new StringBuilder();
-        for (HomeApps.Item it : inputs) {
-            if (it.kind != HomeApps.INPUT || !it.connected) continue;
-            if (s.length() > 0) s.append(" · ");
-            s.append(it.label);
-            if (s.length() > 22) break;
-        }
-        return s.length() > 0 ? s.toString() : "TV et HDMI";
     }
 
     private static final float CARDS_Y = 518, DOCK_Y = 776, DOCK_PAD = 42, DOCK_W = 250, DOCK_H = 141, DOCK_GAP = 24;
@@ -544,7 +434,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             return true;
         }
         Cell at = focused();
-        if (ok && at != null && (at.kind == C_RESUME || (projo && at.kind == C_PICK) || (projo && at.kind == C_APP && at.item.kind == HomeApps.APP))) {
+        if (ok && at != null && (at.kind == C_RESUME || at.kind == C_PICK || (at.kind == C_APP && at.item.kind == HomeApps.APP))) {
             if (!held && removing == at) {   // confirmation
                 if (at.resume != null) {
                     Maison.hide(activity, at.resume);
@@ -586,7 +476,8 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 if (!held) activate();
                 return true;
             case KeyEvent.KEYCODE_MENU:
-                if (!projo || sheet) return false;
+            case KeyEvent.KEYCODE_NOTIFICATION:   // la roue crantée : sur l'accueil, la touche nous arrive directement
+                if (sheet) return false;
                 panel.open();
                 return true;
             case KeyEvent.KEYCODE_BACK:
@@ -604,7 +495,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     private static boolean isOurs(int code) {
         return code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT || code == KeyEvent.KEYCODE_DPAD_UP
                 || code == KeyEvent.KEYCODE_DPAD_DOWN || code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
-                || code == KeyEvent.KEYCODE_NUMPAD_ENTER || code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_MENU;
+                || code == KeyEvent.KEYCODE_NUMPAD_ENTER || code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_NOTIFICATION;
     }
 
     private void move(int dx, int dy, boolean held) {
@@ -628,15 +519,15 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 col = next;
             } else {
                 int next = row + dy;
-                if (next < 0 && projo) head = true;
+                if (next < 0) head = true;
                 if (next < 0 || next >= rows.size()) {
                     invalidate();
                     return;
                 }
                 RectF from = rows.get(row).get(col).r;
                 float cx = from.left + Math.min(from.width(), 219) / 2;   // depuis le héros : la première app, pas celle du milieu
-                if (projo && tonight.contains(rows.get(row).get(col))) cx -= tonightScroll;   // position à l'écran
-                else if (projo && rows.get(next) == tonight) cx += tonightScroll;
+                if (tonight.contains(rows.get(row).get(col))) cx -= tonightScroll;   // position à l'écran
+                else if (rows.get(next) == tonight) cx += tonightScroll;
                 row = next;
                 col = nearest(rows.get(row), cx);
             }
@@ -712,22 +603,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 HomeApps.open(activity, it, this, x, y, w, h);
                 break;
             }
-            case C_SOUND:
-                note(c, "…", true);
-                Sound.toggle(activity, ok -> {
-                    if (!ok) note(c, "Pas de réponse", false);
-                    else c.noteUntil = 0;
-                    rebuild();
-                });
-                break;
-            case C_SALON:
-                note(c, "…", true);
-                Maison.salon(c.action, ok -> {
-                    if (ok) Maison.lastScene(activity, c.action);
-                    note(c, ok ? "Lancé" : "Hub injoignable", ok);
-                    rebuild();
-                });
-                break;
             default:
                 break;
         }
@@ -783,7 +658,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             moving = true;
         }
         float want = tonightScroll;
-        if (projo && f != null && tonight.contains(f)) {   // la carte focalisée entière à l'écran
+        if (f != null && tonight.contains(f)) {   // la carte focalisée entière à l'écran
             if (f.r.right - want > W - SAFE_X) want = f.r.right - (W - SAFE_X);
             if (f.r.left - want < SAFE_X) want = f.r.left - SAFE_X;
         } else if (tonight.isEmpty()) want = 0;
@@ -818,12 +693,10 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     @Override protected void onDraw(Canvas c) {
         boolean moving = stepFocus();
         c.drawColor(BG);
-        if (!projo) drawGlows(c);
         c.save();
         c.scale(k, k);
         if (sheet) drawSheet(c);
-        else if (projo) drawProjo(c);
-        else drawTv(c);
+        else drawProjo(c);
         c.restore();
         if (moving) postInvalidateOnAnimation();
     }
@@ -883,7 +756,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         HomeData.Weather wx = data.weather;
         if (wx != null && !Double.isNaN(wx.temp)) {
             String deg = HomeData.degrees(wx.temp), cond = HomeData.condition(wx.code, wx.isDay);
-            float right = W - SAFE_X - (projo ? 56 + 28 : 0);
+            float right = W - SAFE_X - (56 + 28);
             float wc = meta.measureText(cond);
             meta.setColor(ink2);
             c.drawText(cond, right - wc, base, meta);
@@ -971,8 +844,8 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     }
 
     private Bitmap imageOf(Cell cell, boolean wide) {
-        if (cell.resume != null) return Maison.image(getContext(), wideUri(cell.resume, wide), wide ? WIDE : projo ? 352 : 640, this::invalidate);
-        if (cell.pick != null && projo) {
+        if (cell.resume != null) return Maison.image(getContext(), wideUri(cell.resume, wide), wide ? WIDE : 352, this::invalidate);
+        if (cell.pick != null) {
             // Projo : l'image TMDB telle quelle. Le Backdrop de l'amont (plein écran + versions floutées, 4 en cache)
             // pèse trop ici et tourne en rond dès qu'il y a cinq suggestions.
             String uri = pickUri(cell.pick, wide);
@@ -1151,7 +1024,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         Bitmap src = imageOf(cell, true);
         if (src == null) return null;
         composing.add(key);
-        String raw = cell.resume != null ? wideUri(cell.resume, true) : cell.pick != null && projo ? pickUri(cell.pick, true) : null;
+        String raw = cell.resume != null ? wideUri(cell.resume, true) : cell.pick != null ? pickUri(cell.pick, true) : null;
         new Thread(() -> {
             Bitmap out = null;
             try {

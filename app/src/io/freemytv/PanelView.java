@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Le panneau de contrôle du projo : le son en large, quatre tuiles (veille, projecteur, Bluetooth, réseau), puis les
+ * Le panneau de contrôle (projo ; sur la TV : plus les scènes du salon et la sortie son) : le son en large, quatre tuiles (veille, projecteur, Bluetooth, réseau), puis les
  * entrées HDMI. Une vue à part, pour servir à deux endroits : dans l'accueil (pastille de l'en-tête, touche Menu) et
  * par-dessus n'importe quelle appli (roue crantée, fenêtre du service de touches) sans quitter ce qu'on regarde.
  * Mesures en px de la maquette 1920×1080 ; la vue fait la largeur du panneau plus la marge droite de l'écran, d'où
@@ -27,12 +27,12 @@ final class PanelView extends View {
     static final float W = 600, MARGIN = 96, TOP = 54 + 56 + 20;
     private static final float PAD = 28;
     private static final int BG = 0xFF0A161D, INK = 0xFFDFE7EC, INK2 = 0xCCDFE7EC, MUTED = 0xFF9AABB8, WARM = 0xFFFC734D;
-    private static final int VOLUME = 0, SLEEP = 1, SETTINGS = 2, BLUETOOTH = 3, NETWORK = 4, INPUT = 5, TIMER = 6, RESTORE = 7;
+    private static final int VOLUME = 0, SLEEP = 1, SETTINGS = 2, BLUETOOTH = 3, NETWORK = 4, INPUT = 5, TIMER = 6, RESTORE = 7, SCENE = 8;
     private static final int[] TIMER_STEPS = {0, 30, 60, 120};   // minutes
 
     private static final class Cell {
         int kind;
-        String title, icon, sub, inputId;
+        String title, icon, sub, inputId, action;
         boolean warm;
         final RectF r = new RectF();
         float f;
@@ -41,6 +41,7 @@ final class PanelView extends View {
     private final List<Cell> cells = new ArrayList<>();
     private final Runnable closed;
     private final float k;
+    private final boolean tv = !Maison.projo();   // la TV : scènes du salon, sortie son, entrées branchées d'abord
     private float bottom, volume, slide;   // slide : 0 fermé .. 1 ouvert
     private int index;
     private boolean open;
@@ -84,24 +85,42 @@ final class PanelView extends View {
         y += 96 + 16;
         cell(SLEEP, "Veille", "moon", x0, y, x0 + half, y + 132);
         // Mise au point, trapèze, luminosité : les réglages de XGIMI, on y mène.
-        cell(SETTINGS, "Projecteur", "settings", x1 - half, y, x1, y + 132);
+        cell(SETTINGS, tv ? "Réglages" : "Projecteur", "settings", x1 - half, y, x1, y + 132);
         y += 132 + 16;
-        cell(BLUETOOTH, "Bluetooth", "bluetooth", x0, y, x0 + half, y + 132);
-        cell(NETWORK, "Réseau", "wifi", x1 - half, y, x1, y + 132);
-        y += 132 + 16;
+        if (!tv) {   // sur la TV, la place va au salon et aux entrées ; Bluetooth et réseau sont dans Réglages
+            cell(BLUETOOTH, "Bluetooth", "bluetooth", x0, y, x0 + half, y + 132);
+            cell(NETWORK, "Réseau", "wifi", x1 - half, y, x1, y + 132);
+            y += 132 + 16;
+        }
         cell(TIMER, timerTitle(), "timer", x0, y, x0 + half, y + 132);
         cell(RESTORE, "Titres retirés", "undo", x1 - half, y, x1, y + 132);
         y += 132;
+        if (tv && Maison.hasHub()) {
+            y += 62;   // l'intertitre « Salon »
+            float third = (x1 - x0 - 24) / 3;
+            String[][] scenes = {{"cinema", "Cinéma", "film"}, {"ambiance", "Ambiance", "bulb"}, {"eteindre", "Éteindre", "power"}};
+            for (int i = 0; i < 3; i++) {
+                Cell c = cell(SCENE, scenes[i][1], scenes[i][2], x0 + i * (third + 12), y, x0 + i * (third + 12) + third, y + 116);
+                c.action = scenes[i][0];
+                c.warm = Maison.sceneAt(getContext(), c.action) > 0;   // la dernière lancée d'ici
+            }
+            y += 116;
+        }
+        List<HomeApps.Item> inputs = new ArrayList<>();
+        for (HomeApps.Item it : HomeApps.allInputs(getContext())) if (it.kind == HomeApps.INPUT) inputs.add(it);
+        if (tv) inputs.sort((a, b) -> Boolean.compare(b.connected, a.connected));   // tri stable : les branchées d'abord
+        float rowH = tv ? 62 : 76, gap = tv ? 10 : 12;
         boolean any = false;
-        for (HomeApps.Item it : HomeApps.allInputs(getContext())) {
-            if (it.kind != HomeApps.INPUT || TOP + y + 150 > 1080 - 54) continue;
-            y += any ? 12 : 62;   // la première laisse la place de l'intertitre « Entrées »
+        for (HomeApps.Item it : inputs) {
+            float lead = any ? gap : 62;   // la première laisse la place de l'intertitre « Entrées »
+            if (TOP + y + lead + rowH + PAD > 1080 - 54) break;   // shortcut: les entrées qui ne tiennent pas sont omises, faire défiler si ça manque
+            y += lead;
             any = true;
-            Cell c = cell(INPUT, it.label, "input", x0, y, x1, y + 76);
+            Cell c = cell(INPUT, it.label, "input", x0, y, x1, y + rowH);
             c.inputId = it.inputId;
             c.sub = it.connected ? "Branché" : "Rien de branché";
             c.warm = it.connected;
-            y += 76;
+            y += rowH;
         }
         bottom = y + PAD;
     }
@@ -156,6 +175,7 @@ final class PanelView extends View {
                 break;
             case KeyEvent.KEYCODE_BACK:
             case KeyEvent.KEYCODE_MENU:
+            case KeyEvent.KEYCODE_NOTIFICATION:   // la roue crantée de la télécommande
                 close();
                 break;
             default:
@@ -230,8 +250,21 @@ final class PanelView extends View {
             case INPUT:
                 start(new Intent(Intent.ACTION_VIEW, TvContract.buildChannelUriForPassthroughInput(c.inputId)));
                 break;
+            case SCENE:   // le panneau reste ouvert : la tuile dit si le hub a répondu
+                c.title = "…";
+                invalidate();
+                Maison.salon(c.action, ok -> {
+                    if (ok) Maison.lastScene(app, c.action);
+                    c.title = ok ? "Lancé" : "Injoignable";
+                    c.warm = ok && !"eteindre".equals(c.action);
+                    invalidate();
+                });
+                return;
+            case VOLUME:   // TV : OK bascule haut-parleurs ⇄ barre de son
+                if (tv && Sound.out() != null) Sound.toggle(app, ok -> invalidate());
+                return;
             default:
-                return;   // le son se règle à gauche et à droite
+                return;
         }
         close();
     }
@@ -338,6 +371,10 @@ final class PanelView extends View {
                 section.setColor(MUTED);
                 c.drawText("ENTRÉES", r.left + 4, r.top - 22, section);
             }
+            if (cell.kind == SCENE && "cinema".equals(cell.action)) {
+                section.setColor(MUTED);
+                c.drawText("SALON", r.left + 4, r.top - 22, section);
+            }
             if (f > 0) {   // le focus de l'accueil : un trait encre à 6 px du bord
                 stroke.setStrokeWidth(3);
                 stroke.setColor(Ui.alpha(INK, f));
@@ -356,7 +393,14 @@ final class PanelView extends View {
                 c.drawText(cell.title, r.left + 24 + 32 + 16, r.top + 36 + Ui.cap(tile) / 2, tile);
                 String pct = Math.round(volume * 100) + " %";
                 section.setColor(INK2);
-                c.drawText(pct, r.right - 24 - section.measureText(pct), r.top + 36 + Ui.cap(section) / 2, section);
+                float px = r.right - 24 - section.measureText(pct);
+                c.drawText(pct, px, r.top + 36 + Ui.cap(section) / 2, section);
+                if (tv && Sound.out() != null) {   // la sortie en cours ; OK la bascule
+                    boolean bar = Sound.OPTICAL.equals(Sound.out());
+                    String out = bar ? "Barre de son" : "Haut-parleurs TV";
+                    meta.setColor(bar ? WARM : MUTED);
+                    c.drawText(out, px - 20 - meta.measureText(out), r.top + 36 + Ui.cap(meta) / 2, meta);
+                }
                 float x0 = r.left + 24, x1 = r.right - 24, y = r.bottom - 22;
                 fill.setColor(0x2EEEF3F6);
                 tmp.set(x0, y - 6, x1, y);
@@ -370,6 +414,10 @@ final class PanelView extends View {
                         r.left + 24 + 32 + 16, r.centerY() + Ui.cap(tile) / 2, tile);
                 meta.setColor(cell.warm ? WARM : MUTED);
                 c.drawText(cell.sub, r.right - 24 - meta.measureText(cell.sub), r.centerY() + Ui.cap(meta) / 2, meta);
+            } else if (cell.kind == SCENE) {   // tuile étroite : le nom en petit
+                MaisonView.icon(c, cell.icon, r.left + 18 + 16, r.top + 20 + 16, 32, cell.warm ? WARM : icon);
+                meta.setColor(f > 0.5f ? INK : INK2);
+                c.drawText(cell.title, r.left + 18, r.bottom - 22, meta);
             } else {   // tuile : le pictogramme en haut, le nom en bas
                 MaisonView.icon(c, cell.icon, r.left + 24 + 18, r.top + 24 + 18, 36, icon);
                 c.drawText(cell.title, r.left + 24, r.bottom - 26, tile);
