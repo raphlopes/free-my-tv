@@ -477,6 +477,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 return true;
             case KeyEvent.KEYCODE_MENU:
             case KeyEvent.KEYCODE_NOTIFICATION:   // la roue crantée : sur l'accueil, la touche nous arrive directement
+            case KEY_TCL_GEAR:
                 if (sheet) return false;
                 panel.open();
                 return true;
@@ -492,10 +493,12 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         }
     }
 
+    static final int KEY_TCL_GEAR = 4001;   // télécommande TCL : sa roue crantée envoie ce code maison (relevé le 22/11/2026)
+
     private static boolean isOurs(int code) {
         return code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT || code == KeyEvent.KEYCODE_DPAD_UP
                 || code == KeyEvent.KEYCODE_DPAD_DOWN || code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
-                || code == KeyEvent.KEYCODE_NUMPAD_ENTER || code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_NOTIFICATION;
+                || code == KeyEvent.KEYCODE_NUMPAD_ENTER || code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_NOTIFICATION || code == KEY_TCL_GEAR;
     }
 
     private void move(int dx, int dy, boolean held) {

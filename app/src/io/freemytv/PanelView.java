@@ -176,6 +176,7 @@ final class PanelView extends View {
             case KeyEvent.KEYCODE_BACK:
             case KeyEvent.KEYCODE_MENU:
             case KeyEvent.KEYCODE_NOTIFICATION:   // la roue crantée de la télécommande
+            case MaisonView.KEY_TCL_GEAR:
                 close();
                 break;
             default:
