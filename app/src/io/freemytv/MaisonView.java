@@ -54,8 +54,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
 
     // MARK: - Cellules
 
-    private static final int C_RESUME = 0, C_PICK = 1, C_APP = 2, C_ALL = 3, C_SALON = 4, C_SOUND = 5, C_INPUTS = 6,
-            C_SETTINGS = 7, C_CONTROL = 8;
+    private static final int C_RESUME = 0, C_PICK = 1, C_APP = 2, C_ALL = 3, C_CONTROL = 8;
 
     private static final class Cell {
         int kind;
@@ -65,7 +64,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         Recs.Pick pick;
         HomeApps.Item item;
         String action, title, sub, icon;
-        boolean hero, poster, frame, warm;
+        boolean frame, warm;
         float f;                // focus affiché, 0..1
         long noteUntil;         // retour d'une action (« Lancé ») jusqu'à
         String note;
@@ -116,7 +115,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
 
     // Dessin
     private float k = 1;
-    private Bitmap glows;
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint image = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -368,16 +366,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         return panel;
     }
 
-    private Cell quickCell(int kind, float x, float y, String title, String icon) {
-        Cell c = new Cell();
-        c.kind = kind;
-        c.title = title;
-        c.icon = icon;
-        c.radius = 12;
-        c.r.set(x - 14, y - 10, x + 28 + 12 + meta.measureText(title) + 14, y + 38);
-        return c;
-    }
-
     private void addRow(String title, List<Cell> cells) {
         if (cells.isEmpty()) return;
         rows.add(cells);
@@ -599,13 +587,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             case C_CONTROL:
                 panel.open();
                 break;
-            case C_SETTINGS: {
-                HomeApps.Item it = new HomeApps.Item();
-                it.kind = HomeApps.ANDROID_SETTINGS;
-                it.label = c.title;
-                HomeApps.open(activity, it, this, x, y, w, h);
-                break;
-            }
             default:
                 break;
         }
@@ -690,7 +671,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
 
     @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
         k = w / W;
-        glows = null;
     }
 
     @Override protected void onDraw(Canvas c) {
@@ -702,50 +682,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         else drawProjo(c);
         c.restore();
         if (moving) postInvalidateOnAnimation();
-    }
-
-    /** Les deux lueurs du fond, calculées une fois dans un bitmap tramé à mi-résolution. */
-    private void drawGlows(Canvas c) {
-        if (glows == null && getWidth() > 0) {
-            int w = getWidth() / 2, h = getHeight() / 2;
-            glows = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-            Canvas g = new Canvas(glows);
-            float s = w / W;
-            Paint p = new Paint(Paint.DITHER_FLAG);
-            p.setShader(new RadialGradient(0.82f * W * s, -0.10f * H * s, 1100 * s, 0x1F0297DE, 0x000297DE, Shader.TileMode.CLAMP));
-            g.drawRect(0, 0, w, h, p);
-            p.setShader(new RadialGradient(0, 1.12f * H * s, 900 * s, 0x12FC734D, 0x00FC734D, Shader.TileMode.CLAMP));
-            g.drawRect(0, 0, w, h, p);
-        }
-        if (glows != null) {
-            tmp.set(0, 0, getWidth(), getHeight());
-            c.drawBitmap(glows, null, tmp, image);
-        }
-    }
-
-    private void drawTv(Canvas c) {
-        drawHeader(c);
-        for (int r = 0; r < rows.size(); r++) {
-            List<Cell> cells = rows.get(r);
-            String title = rowTitles.get(r);
-            if (title != null) {
-                section.setColor(muted);
-                c.drawText(title.toUpperCase(java.util.Locale.ROOT), SAFE_X, cells.get(0).r.top - 36, section);   // au-dessus du focus (28 px)
-            }
-            // Le focus d'abord en dessous, l'élément focalisé dessiné en dernier (il grandit sur ses voisins).
-            Cell top = null;
-            for (Cell cell : cells) {
-                if (cell.f > 0 && (top == null || cell.f > top.f)) {
-                    if (top != null) drawCell(c, top);   // celui qu'on quitte reste dessiné (sinon il clignote)
-                    top = cell;
-                } else drawCell(c, cell);
-            }
-            if (top != null) drawCell(c, top);
-        }
-        if (rows.isEmpty()) {
-            meta.setColor(muted);
-            c.drawText("Chargement…", SAFE_X, 540, meta);
-        }
     }
 
     private void drawHeader(Canvas c) {
@@ -787,7 +723,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     private void drawCell(Canvas c, Cell cell) {
         float f = ease(cell.f);
         RectF r = tmp;
-        boolean grows = !cell.frame && cell.kind != C_SETTINGS && !(projo && cell.kind == C_INPUTS);
+        boolean grows = !cell.frame;
         float g = grows ? GROW * f : 0;
         if (cell.frame) {
             // Projo : l'image grandit, la légende reste en place.
@@ -799,7 +735,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         switch (cell.kind) {
             case C_RESUME:
             case C_PICK:
-                if (cell.frame) drawFrame(c, cell, r, f); else if (cell.hero) drawHero(c, cell, r); else drawPoster(c, cell, r);
+                drawFrame(c, cell, r, f);
                 break;
             case C_APP:
                 if (cell.frame) drawFrame(c, cell, r, f); else drawApp(c, cell.item, r, cell.radius, f);
@@ -807,12 +743,8 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             case C_ALL:
                 if (cell.frame) drawFrame(c, cell, r, f); else drawAll(c, r, cell.radius);
                 break;
-            case C_SETTINGS:
-            case C_INPUTS:
-                if (projo) drawQuick(c, cell, f); else drawTile(c, cell, r);
-                break;
             default:
-                drawTile(c, cell, r);
+                break;
         }
     }
 
@@ -878,18 +810,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         image.setShader(null);
     }
 
-    private void drawHero(Canvas c, Cell cell, RectF r) {
-        cover(c, imageOf(cell, true), r, cell.radius);
-        // Voiles : à gauche pour le texte, en bas pour la rangée suivante.
-        scrim.setShader(new LinearGradient(r.left, 0, r.left + r.width() * 0.7f, 0,
-                new int[] {0xE002070A, 0x8002070A, 0x0002070A}, new float[] {0, 0.6f, 1}, Shader.TileMode.CLAMP));
-        c.drawRoundRect(r, cell.radius, cell.radius, scrim);
-        scrim.setShader(new LinearGradient(0, r.bottom, 0, r.bottom - r.height() * 0.55f, 0xD902070A, 0x0002070A, Shader.TileMode.CLAMP));
-        c.drawRoundRect(r, cell.radius, cell.radius, scrim);
-        scrim.setShader(null);
-        heroText(c, cell, r.left + 48, r.bottom - 44);
-    }
-
     /** De bas en haut depuis `bottom` : jauge, méta, titre (serif), section. */
     private void heroText(Canvas c, Cell cell, float x, float bottom) {
         boolean resume = cell.resume != null;
@@ -918,32 +838,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         c.drawText(label.toUpperCase(java.util.Locale.ROOT), x, bottom, section);
     }
 
-    private void drawPoster(Canvas c, Cell cell, RectF r) {
-        cover(c, imageOf(cell, false), r, cell.radius);
-        scrim.setShader(new LinearGradient(0, r.bottom, 0, r.bottom - r.height() * 0.5f, 0xC002070A, 0x0002070A, Shader.TileMode.CLAMP));
-        c.drawRoundRect(r, cell.radius, cell.radius, scrim);
-        scrim.setShader(null);
-        // Repère d'origine en haut à gauche.
-        String origin = cell.resume != null ? cell.resume.app : Recs.serviceName(cell.pick);
-        if (origin != null && !origin.isEmpty()) {
-            meta.setTextSize(22);
-            float w = meta.measureText(origin) + 24;
-            fill.setColor(0xB802070A);
-            tmp2.set(r.left + 18, r.top + 18, r.left + 18 + w, r.top + 18 + 36);
-            c.drawRoundRect(tmp2, 6, 6, fill);
-            meta.setColor(cell.resume != null ? WARM : ink);
-            c.drawText(origin, r.left + 30, r.top + 18 + 18 + Ui.cap(meta) / 2, meta);
-            meta.setTextSize(24);
-        }
-        // Le titre : l'image TMDB est une photo sans titre, on l'écrit dessous.
-        tile.setTextSize(30);
-        tile.setColor(0xFFFFFFFF);
-        String t = ellipsize(cell.title == null ? "" : cell.title, tile, r.width() - 48);
-        c.drawText(t, r.left + 24, r.bottom - 28, tile);
-        tile.setTextSize(28);
-        tile.setColor(ink);
-    }
-
     private void drawApp(Canvas c, HomeApps.Item it, RectF r, float radius, float f) {
         if (it.tile != null) {
             // Les bannières blanches écrasent le reste (et éblouissent sur le projo) : atténuées hors focus.
@@ -969,43 +863,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         meta.setColor(ink);
         String s = "Toutes les apps";
         c.drawText(s, r.centerX() - meta.measureText(s) / 2, r.centerY() + 34, meta);
-        meta.setTextSize(24);
-    }
-
-    private void drawTile(Canvas c, Cell cell, RectF r) {
-        boolean noting = cell.noteUntil > SystemClock.uptimeMillis();
-        boolean on = cell.warm && !noting;   // cantaloup = allumé, jamais pour dire « c'est fait »
-        boolean done = noting && cell.noteOk && !"…".equals(cell.note);
-        fill.setColor(SURFACE);
-        c.drawRoundRect(r, cell.radius, cell.radius, fill);
-        if (on) {
-            fill.setColor(WARM_TINT);
-            c.drawRoundRect(r, cell.radius, cell.radius, fill);
-        }
-        float s = r.width() / 320;   // la tuile grandit avec le focus : son contenu aussi
-        float x = r.left + 26 * s;
-        drawIcon(c, cell.icon, x + 18 * s, r.centerY(), 36 * s, on ? WARM : ink2);
-        float tx = x + (36 + 20) * s;
-        tile.setTextSize(28 * s);
-        tile.setColor(ink);
-        meta.setTextSize(24 * s);
-        float block = Ui.cap(tile) + 6 * s + 24 * s;
-        float top = r.centerY() - block / 2;
-        c.drawText(cell.title, tx, top + Ui.cap(tile), tile);
-        String sub = noting ? cell.note : cell.sub;
-        float sx = tx;
-        if (on) {
-            fill.setColor(WARM);
-            tmp2.set(sx, top + block - 10 * s - 3 * s, sx + 10 * s, top + block - 3 * s);
-            c.drawRoundRect(tmp2, 2 * s, 2 * s, fill);
-            sx += 20 * s;
-        } else if (done) {
-            drawIcon(c, "check", sx + 10 * s, top + block - Ui.cap(meta) / 2, 24 * s, ink);
-            sx += 28 * s;
-        }
-        meta.setColor(on ? WARM : done ? ink : muted);
-        if (sub != null) c.drawText(ellipsize(sub, meta, r.right - sx - 20 * s), sx, top + block, meta);
-        tile.setTextSize(28);
         meta.setTextSize(24);
     }
 
@@ -1143,14 +1000,6 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         boolean ask = cell == removing;
         meta.setColor(ask ? WARM : f > 0.5f ? ink : muted);
         c.drawText(ask ? "Retirer ? OK · Retour" : ellipsize(cell.title == null ? "" : cell.title, meta, 320), cell.r.left, cell.r.bottom + 44, meta);
-    }
-
-    private void drawQuick(Canvas c, Cell cell, float f) {
-        // Raccourcis du projo : un pictogramme et un libellé ; le focus entoure le libellé (drawFocus déjà fait).
-        float x = cell.r.left + 14, cy = cell.r.centerY();
-        drawIcon(c, cell.icon, x + 14, cy, 28, f > 0.5f ? ink : muted);
-        meta.setColor(f > 0.5f ? ink : muted);
-        c.drawText(cell.title, x + 28 + 12, cy + Ui.cap(meta) / 2, meta);
     }
 
     // MARK: - Écran des apps / entrées

@@ -44,7 +44,8 @@ final class RemoteKeys {
     static boolean onKey(Context c, KeyEvent e) {
         // Projo (maison) : la roue crantée. Android ne la confie qu'à une appli système (l'accueil Google, désactivé) :
         // le service de touches la prend pour ouvrir notre panneau par-dessus ce qu'on regarde. Seule touche filtrée sur le projo.
-        if (e.getKeyCode() == KeyEvent.KEYCODE_NOTIFICATION && c instanceof RemoteKeyService && Maison.projo()) {
+        // Sur la TV TCL, la roue envoie la touche maison 4001.
+        if ((e.getKeyCode() == KeyEvent.KEYCODE_NOTIFICATION || e.getKeyCode() == MaisonView.KEY_TCL_GEAR) && c instanceof RemoteKeyService) {
             if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) ((RemoteKeyService) c).togglePanel();
             return true;
         }
