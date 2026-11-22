@@ -138,6 +138,7 @@ final class PanelView extends View {
     void open() {
         build();   // les entrées ont pu changer
         readVolume();
+        if (tv) Sound.refresh(getContext(), this::invalidate);   // la sortie son : chaque processus (accueil, service) la relit
         index = 0;   // le son : ce qu'on vient régler le plus souvent
         for (Cell c : cells) c.f = c == cells.get(0) ? 1 : 0;
         open = true;
