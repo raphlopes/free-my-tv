@@ -13,6 +13,24 @@ public class RemoteKeyService extends AccessibilityService {
         return RemoteKeys.onKey(this, event);
     }
 
+    private final android.os.Handler hold = new android.os.Handler(android.os.Looper.getMainLooper());
+
+    /** Touche de volume tenue : après 450 ms, un cran toutes les 80 ms jusqu'au relâchement (6 s au plus). */
+    void volumeHold(KeyEvent e) {
+        hold.removeCallbacksAndMessages(null);   // relâchement, autre touche, ou répétition du système : on arrête
+        if (e.getAction() != KeyEvent.ACTION_DOWN || e.getRepeatCount() > 0) return;
+        int dir = e.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP ? android.media.AudioManager.ADJUST_RAISE : android.media.AudioManager.ADJUST_LOWER;
+        long until = android.os.SystemClock.uptimeMillis() + 6_000;
+        android.media.AudioManager am = (android.media.AudioManager) getSystemService(AUDIO_SERVICE);
+        hold.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (android.os.SystemClock.uptimeMillis() > until) return;
+                am.adjustSuggestedStreamVolume(dir, android.media.AudioManager.USE_DEFAULT_STREAM_TYPE, android.media.AudioManager.FLAG_SHOW_UI);
+                hold.postDelayed(this, 80);
+            }
+        }, 450);
+    }
+
     private PanelView panel;
 
     /** Le panneau de contrôle dans une fenêtre du service, par-dessus l'appli en cours (qui continue de tourner). */

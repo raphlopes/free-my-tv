@@ -49,6 +49,13 @@ final class RemoteKeys {
             if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) ((RemoteKeyService) c).togglePanel();
             return true;
         }
+        // TV TCL : dès qu'un service filtre les touches, le volume ne se répète plus quand on tient la touche (relevé le
+        // 22/11/2026). Le service le répète lui-même ; l'appui simple reste celui du système.
+        if (c instanceof RemoteKeyService && !Maison.projo()
+                && (e.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP || e.getKeyCode() == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+            ((RemoteKeyService) c).volumeHold(e);
+            return false;
+        }
         if (!supported()) return false;
         // BUTTON_3 is also a game controller's button: keys from a gamepad or a joystick are left alone.
         int source = e.getSource();

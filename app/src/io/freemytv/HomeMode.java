@@ -220,9 +220,8 @@ final class HomeMode {
         }
     }
 
-    /** Projo (maison) : le service de touches, pour la seule roue crantée. Android le coupe à chaque mise à jour de l'appli. */
+    /** Maison (projo et TV) : le service de touches, pour la roue crantée. Android le coupe à chaque mise à jour de l'appli. */
     static void gearService(Context c) {
-        if (!Maison.projo()) return;
         Context app = c.getApplicationContext();
         new Thread(() -> {
             try (Adb adb = Adb.connect(app, 10_000, null)) {
