@@ -139,6 +139,26 @@ final class Adb implements Closeable {
         }
     }
 
+    /** Runs a command that keeps printing (getevent) and hands over each line, until the command or the connection ends. */
+    void lines(String command, java.util.function.Consumer<String> line) throws IOException {
+        socket.setSoTimeout(0);   // it can stay silent for hours
+        int local = nextLocalId++;
+        send(OPEN, local, 0, ("shell:" + command + "\0").getBytes(StandardCharsets.UTF_8));
+        StringBuilder buf = new StringBuilder();
+        while (true) {
+            Message m = read();
+            if (m.arg1 != local) continue;
+            if (m.command == WRTE) {
+                buf.append(new String(m.data, StandardCharsets.UTF_8));
+                send(OKAY, local, m.arg0, null);
+                for (int nl; (nl = buf.indexOf("\n")) >= 0; buf.delete(0, nl + 1)) line.accept(buf.substring(0, nl).trim());
+            } else if (m.command == CLSE) {
+                send(CLSE, local, m.arg0, null);
+                return;
+            }
+        }
+    }
+
     @Override public void close() {
         try { socket.close(); } catch (IOException ignored) {}
     }

@@ -13,19 +13,58 @@ public class RemoteKeyService extends AccessibilityService {
         return RemoteKeys.onKey(this, event);
     }
 
+    // TV TCL : Android traite les touches de volume avant tout service de touches, et ne les répète plus dès qu'un
+    // service filtre les touches (relevé le 22/11/2026). On lit donc l'état brut de la télécommande (getevent, par l'ADB
+    // local) pour répéter le volume tant que la touche est tenue ; l'appui simple reste celui du système.
     private final android.os.Handler hold = new android.os.Handler(android.os.Looper.getMainLooper());
+    private volatile boolean watching;
+    private volatile Adb watch;   // le flux en cours, fermé avec le service (sinon il resterait bloqué en lecture)
+
+    @Override protected void onServiceConnected() {
+        super.onServiceConnected();
+        if (Maison.projo() || watching) return;
+        watching = true;
+        new Thread(() -> {
+            while (watching) {
+                try (Adb adb = Adb.connect(getApplicationContext(), 5_000, null)) {
+                    watch = adb;
+                    if (watching) adb.lines("getevent -q", this::rawKey);
+                } catch (Exception e) {
+                    AppLog.w("volume tenu : " + e.getMessage());
+                }
+                hold.post(() -> hold.removeCallbacksAndMessages(null));   // flux coupé : ne jamais laisser le volume monter seul
+                android.os.SystemClock.sleep(5_000);
+            }
+        }, "volume").start();
+    }
+
+    @Override public void onDestroy() {
+        watching = false;
+        Adb adb = watch;
+        if (adb != null) adb.close();
+        hold.removeCallbacksAndMessages(null);
+        super.onDestroy();
+    }
+
+    /** Une ligne de getevent : « /dev/input/event7: 0001 0073 00000001 » (type touche, code, 1 = appui, 0 = relâchement). */
+    private void rawKey(String line) {
+        String[] f = line.split("\\s+");
+        if (f.length < 4 || !f[1].equals("0001") || !(f[2].equals("0073") || f[2].equals("0072"))) return;
+        boolean down = f[3].endsWith("1"), up = f[3].endsWith("0");
+        int dir = f[2].equals("0073") ? android.media.AudioManager.ADJUST_RAISE : android.media.AudioManager.ADJUST_LOWER;
+        if ((down || up) && watching) hold.post(() -> volumeHold(down, dir));
+    }
 
     /** Touche de volume tenue : après 450 ms, un cran toutes les 80 ms jusqu'au relâchement (6 s au plus). */
-    void volumeHold(KeyEvent e) {
-        hold.removeCallbacksAndMessages(null);   // relâchement, autre touche, ou répétition du système : on arrête
-        if (e.getAction() != KeyEvent.ACTION_DOWN || e.getRepeatCount() > 0) return;
-        int dir = e.getKeyCode() == KeyEvent.KEYCODE_VOLUME_UP ? android.media.AudioManager.ADJUST_RAISE : android.media.AudioManager.ADJUST_LOWER;
+    private void volumeHold(boolean down, int dir) {
+        hold.removeCallbacksAndMessages(null);
+        if (!down) return;
         long until = android.os.SystemClock.uptimeMillis() + 6_000;
         android.media.AudioManager am = (android.media.AudioManager) getSystemService(AUDIO_SERVICE);
         hold.postDelayed(new Runnable() {
             @Override public void run() {
                 if (android.os.SystemClock.uptimeMillis() > until) return;
-                am.adjustSuggestedStreamVolume(dir, android.media.AudioManager.USE_DEFAULT_STREAM_TYPE, android.media.AudioManager.FLAG_SHOW_UI);
+                am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, dir, android.media.AudioManager.FLAG_SHOW_UI);
                 hold.postDelayed(this, 80);
             }
         }, 450);
