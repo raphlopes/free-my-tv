@@ -187,9 +187,17 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         }
     };
 
+    private final android.media.tv.TvInputManager.TvInputCallback inputChanged = new android.media.tv.TvInputManager.TvInputCallback() {
+        @Override public void onInputStateChanged(String inputId, int state) {   // un appareil HDMI s'allume ou s'éteint
+            if (running) load();
+        }
+    };
+
     void resume() {
         if (running) return;
         running = true;
+        android.media.tv.TvInputManager tim = (android.media.tv.TvInputManager) activity.getSystemService(Context.TV_INPUT_SERVICE);
+        if (tim != null) tim.registerCallback(inputChanged, handler);
         data.addListener(this);
         recs.addListener(this);
         data.refreshIfStale();
@@ -202,6 +210,8 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
     void pause() {
         if (!running) return;
         running = false;
+        android.media.tv.TvInputManager tim = (android.media.tv.TvInputManager) activity.getSystemService(Context.TV_INPUT_SERVICE);
+        if (tim != null) tim.unregisterCallback(inputChanged);
         handler.removeCallbacks(tick);
         data.removeListener(this);
         recs.removeListener(this);
@@ -267,6 +277,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 for (HomeApps.Item it : all) if (it.pkg.equals(pkg)) row.add(it);
             }
             List<HomeApps.Item> ins = HomeApps.allInputs(c);
+            for (HomeApps.Item it : ins) if (it.kind == HomeApps.INPUT && it.connected) it.tile = HomeApps.symbolTile(c, it.key + it.symbol, it.symbol);
             handler.post(() -> {
                 if (gen != loadGeneration) return;
                 resumes = res;
@@ -309,7 +320,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
 
     private static String key(Cell c) {
         if (c == null) return null;
-        if (c.item != null) return "app:" + c.item.pkg;
+        if (c.item != null) return "app:" + (c.item.pkg != null ? c.item.pkg : c.item.key);
         if (c.resume != null) return "res:" + c.resume.pkg + c.resume.title;
         if (c.pick != null) return "pick:" + c.pick.id;
         return "k:" + c.kind + c.action;
@@ -335,6 +346,14 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
         }
         List<Cell> dock = new ArrayList<>();
         float x = SAFE_X + DOCK_PAD, y = DOCK_Y + 28;
+        // Un appareil allumé sur un HDMI (console, boîtier) passe devant les apps, et s'en va quand il s'éteint.
+        for (HomeApps.Item it : inputs) {
+            if (dock.size() >= 2 || it.kind != HomeApps.INPUT || !it.connected) continue;
+            Cell c = new Cell();
+            c.kind = C_APP;
+            c.item = it;
+            dock.add(c);
+        }
         for (HomeApps.Item it : apps) {
             if (dock.size() >= 5) break;
             Cell c = new Cell();
@@ -903,6 +922,9 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
                 g.drawRect(0, 0, W, H, p);
                 p.setShader(new LinearGradient(0, 300, 0, 740, 0x0002070A, 0xFF02070A, Shader.TileMode.CLAMP));
                 g.drawRect(0, 0, W, H, p);
+                // Le haut aussi : l'heure et la météo restent lisibles sur une image claire.
+                p.setShader(new LinearGradient(0, 0, 0, 240, 0xB302070A, 0x0002070A, Shader.TileMode.CLAMP));
+                g.drawRect(0, 0, W, 240, p);
                 out.setHasAlpha(false);
             } catch (RuntimeException | OutOfMemoryError e) {
                 AppLog.w("fond : " + e.getMessage());
@@ -977,7 +999,7 @@ final class MaisonView extends View implements HomeData.Listener, Recs.Listener 
             for (Cell cell : cells) {   // dock : le nom de l'app focalisée sous sa tuile, en fondu croisé
                 if (cell.frame || cell.kind != C_APP || cell.f <= 0) continue;
                 meta.setTextSize(22);
-                boolean move = cell.item.pkg.equals(movingApp);
+                boolean move = movingApp != null && movingApp.equals(cell.item.pkg);
                 meta.setColor(move ? WARM : Ui.alpha(ink, cell.f * cell.f));
                 c.drawText(move ? "‹  Déplacer  ›" : ellipsize(cell.item.label, meta, DOCK_W), cell.r.left, cell.r.bottom + 38, meta);
                 meta.setTextSize(24);

@@ -36,10 +36,55 @@ public class RemoteKeyService extends AccessibilityService {
                 android.os.SystemClock.sleep(5_000);
             }
         }, "volume").start();
+        if (!Maison.hasHub()) return;
+        Object me = notices = new Object();   // un seul fil d'annonces, même si le service se relie avant la fin de l'ancien
+        new Thread(() -> {
+            long last = -1;   // -1 : la première réponse (l'annonce d'avant notre arrivée) ne s'affiche pas
+            while (notices == me) {
+                try {
+                    org.json.JSONObject n = Maison.notice(last);
+                    long id = n.getLong("id");
+                    if (last >= 0 && id != last && notices == me) hold.post(() -> banner(n.optString("title"), n.optString("text")));
+                    last = id;
+                    android.os.SystemClock.sleep(1_000);
+                } catch (Exception e) {   // hub muet, TV en veille : on repasse plus tard
+                    android.os.SystemClock.sleep(30_000);
+                }
+            }
+        }, "annonces").start();
+    }
+
+    private volatile Object notices;
+    private android.view.View banner;
+
+    /** Une annonce du hub, 8 s en haut à droite, sans prendre le focus ni les touches. */
+    private void banner(String title, String text) {
+        if (title.isEmpty()) return;
+        android.view.WindowManager wm = (android.view.WindowManager) getSystemService(WINDOW_SERVICE);
+        if (banner != null) wm.removeView(banner);
+        Ui.init(this);
+        float k = getResources().getDisplayMetrics().widthPixels / 1920f;
+        android.view.View v = banner = PanelView.banner(this, title, text);
+        android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams(Math.round(PanelView.W * k), Math.round(120 * k),
+                android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                android.graphics.PixelFormat.TRANSLUCENT);
+        lp.gravity = android.view.Gravity.TOP | android.view.Gravity.END;
+        lp.x = Math.round(PanelView.MARGIN * k);
+        lp.y = Math.round(54 * k);
+        wm.addView(v, lp);
+        v.postDelayed(() -> {
+            if (banner != v) return;   // déjà remplacé par une annonce plus récente
+            wm.removeView(v);
+            banner = null;
+        }, 8_000);
     }
 
     @Override public void onDestroy() {
         watching = false;
+        notices = null;
+        if (banner != null) ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).removeView(banner);
+        banner = null;
         Adb adb = watch;
         if (adb != null) adb.close();
         hold.removeCallbacksAndMessages(null);

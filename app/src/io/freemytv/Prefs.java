@@ -163,7 +163,8 @@ final class Prefs {
 
     private static String defaultApp(int keyCode) {
         switch (keyCode) {
-            case KEY_NETFLIX: case KEY_STEM_NETFLIX: return "com.netflix.ninja";
+            case KEY_NETFLIX: return Maison.STREMIO;   // maison : le bouton Netflix de la télécommande TCL ouvre Stremio
+            case KEY_STEM_NETFLIX: return "com.netflix.ninja";
             case KEY_YOUTUBE: return "com.google.android.youtube.tv";
             case KEY_PRIME: return "com.amazon.amazonvideo.livingroom";
             case KEY_TCL_CHANNEL: return "";

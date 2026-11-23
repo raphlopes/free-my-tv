@@ -46,6 +46,7 @@ final class Maison {
         String wide;                // la même image en grand (fond d'écran), si elle existe
         float progress = -1;        // 0..1, ou -1 : inconnu
         long engaged;               // dernière lecture (epoch ms)
+        long left;                  // ce qui restait à la dernière synchro (ms), 0 : inconnu
     }
 
     static boolean projo() {
@@ -381,9 +382,19 @@ final class Maison {
             if (position <= 0) meta.append(fresh ? " · nouvel épisode" : " · à suivre");
         }
         if (duration > 0 && position > 0) r.progress = Math.min(1f, (float) position / duration);
+        if (position > 0 && duration > position) r.left = duration - position;
         left(meta, position, duration);
         r.meta = meta.toString();
         return r;
+    }
+
+    /** Ce qui reste (ms) du titre Stremio regardé dans les 4 dernières heures, ou 0. `changed` : la liste vient de changer. */
+    // shortcut: position de la dernière synchro de Stremio, pas la lecture en direct : la veille tombe au pire après la
+    // fin, jamais avant ; lire la session média (dumpsys media_session) si l'écart gêne.
+    static long episodeLeft(Runnable changed) {
+        Resume last = null;
+        for (Resume r : stremio(changed)) if (last == null || r.engaged > last.engaged) last = r;
+        return last != null && System.currentTimeMillis() - last.engaged < 4 * 3_600_000L ? last.left : 0;
     }
 
     private static long time(String iso) {
@@ -403,10 +414,14 @@ final class Maison {
     }
 
     private static org.json.JSONObject json(String url, byte[] body) throws IOException, org.json.JSONException {
+        return json(url, body, 10_000);
+    }
+
+    private static org.json.JSONObject json(String url, byte[] body, int readTimeout) throws IOException, org.json.JSONException {
         HttpURLConnection h = (HttpURLConnection) new URL(url).openConnection();
         try {
             h.setConnectTimeout(5_000);
-            h.setReadTimeout(10_000);
+            h.setReadTimeout(readTimeout);
             if (body != null) {
                 h.setRequestMethod("POST");
                 h.setRequestProperty("Content-Type", "application/json");
@@ -527,6 +542,77 @@ final class Maison {
             boolean result = ok;
             main.post(() -> done.accept(result));
         });
+    }
+
+    // MARK: - Hub : lampes, photos, annonces
+
+    private static String hub() {
+        return Config.HUB_URL.trim().replaceAll("/+$", "");
+    }
+
+    /** Les lampes allumées d'après le hub (« Donut, Fado TV ») ; "" : tout est éteint ; null : hub muet. Sur le fil principal. */
+    static void lights(Consumer<String> done) {
+        io.execute(() -> {
+            String on = null;
+            try {
+                org.json.JSONArray l = get(hub() + "/api/state").getJSONObject("ha").getJSONArray("lights");
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < l.length(); i++) {
+                    org.json.JSONObject o = l.getJSONObject(i);
+                    if (o.optBoolean("on") && o.optBoolean("available", true)) sb.append(sb.length() > 0 ? ", " : "").append(o.optString("name"));
+                }
+                on = sb.toString();
+            } catch (IOException | org.json.JSONException e) {
+                AppLog.w("lampes : " + e.getMessage());
+            }
+            String result = on;
+            main.post(() -> done.accept(result));
+        });
+    }
+
+    /** Les photos du hub déjà copiées ici (écran de veille). */
+    static java.io.File[] photos(Context c) {
+        java.io.File[] f = new java.io.File(c.getCacheDir(), "photos").listFiles((d, n) -> !n.endsWith(".part"));
+        return f == null ? new java.io.File[0] : f;
+    }
+
+    /** Aligne le dossier local sur les photos paysage du hub (40 au plus), en fond : le hub les sert déjà à la taille de l'écran. */
+    static void syncPhotos(Context c) {
+        if (!hasHub()) return;
+        java.io.File dir = new java.io.File(c.getCacheDir(), "photos");
+        io.execute(() -> {
+            try {
+                org.json.JSONArray names = get(hub() + "/api/tv/photos").getJSONArray("photos");
+                Set<String> keep = new HashSet<>();
+                dir.mkdirs();
+                for (int i = 0; i < names.length() && i < 40; i++) {
+                    String name = names.getString(i);
+                    java.io.File f = new java.io.File(dir, name.replaceAll("[^A-Za-z0-9._-]", "_")), part = new java.io.File(dir, f.getName() + ".part");
+                    keep.add(f.getName());
+                    if (f.exists()) continue;
+                    HttpURLConnection h = (HttpURLConnection) new URL(hub() + "/api/tv/photos/" + Uri.encode(name)).openConnection();
+                    h.setConnectTimeout(5_000);
+                    h.setReadTimeout(20_000);
+                    try (InputStream in = h.getInputStream(); java.io.FileOutputStream out = new java.io.FileOutputStream(part)) {
+                        byte[] buf = new byte[16_384];
+                        int n;
+                        while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                    } finally {
+                        h.disconnect();
+                    }
+                    if (!part.renameTo(f)) part.delete();
+                }
+                java.io.File[] all = dir.listFiles();
+                if (all != null) for (java.io.File f : all) if (!keep.contains(f.getName())) f.delete();
+            } catch (IOException | org.json.JSONException e) {
+                AppLog.w("photos : " + e.getMessage());
+            }
+        });
+    }
+
+    /** Attend la prochaine annonce du hub (il garde la requête ~50 s) : {id, title, text} ; id == after : rien de neuf. Bloquant. */
+    static org.json.JSONObject notice(long after) throws IOException, org.json.JSONException {
+        return json(hub() + "/api/tv/notice?after=" + after, null, 70_000);
     }
 
     // MARK: - Images (affiches Watch Next : content:// ou https)

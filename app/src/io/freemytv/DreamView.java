@@ -168,7 +168,8 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         startedAt = clock();
         lastFrame = 0;
         failed.clear();
-        fallback = recs.showcase().isEmpty();
+        Maison.syncPhotos(getContext().getApplicationContext());
+        fallback = showcase().isEmpty();
         data.addListener(this);
         recs.addListener(this);
         data.refreshIfStale();
@@ -261,7 +262,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     /** Loads the next photo in the background (one at a time); once ready, it comes in at the right moment. */
     private void prepareNext() {
         if (!running || decoding || prepared != null) return;
-        List<Recs.Pick> list = recs.showcase();
+        List<Recs.Pick> list = showcase();
         if (list.isEmpty()) return;
         Slide last = incoming != null ? incoming : current;
         int start = 0;
@@ -287,7 +288,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             prepared = newSlide(pick, last.image, last.frost, last.lightCaption, last.lightClock);
             return;
         }
-        File file = recs.readyImage(pick);
+        File file = "photo".equals(pick.kind) ? new File(pick.backdrop) : recs.readyImage(pick);
         if (file == null) {
             failed.add(Recs.key(pick));   // the image is gone from disk: try the next one
             prepareNext();
@@ -322,6 +323,23 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
                 invalidate();
             });
         });
+    }
+
+    /** Les photos du hub quand il y en a (sans légende), sinon les titres à l'affiche. */
+    private List<Recs.Pick> showcase() {
+        File[] photos = Maison.photos(getContext());
+        if (photos.length == 0) return recs.showcase();
+        java.util.Arrays.sort(photos);
+        List<Recs.Pick> out = new java.util.ArrayList<>();
+        for (File f : photos) {
+            Recs.Pick p = new Recs.Pick();
+            p.kind = "photo";
+            p.id = f.getName().hashCode();
+            p.title = "";
+            p.backdrop = f.getPath();
+            out.add(p);
+        }
+        return out;
     }
 
     private Slide newSlide(Recs.Pick pick, Bitmap image, Bitmap frost, float lightCaption, float lightClock) {
@@ -684,7 +702,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
                     .setIncludePad(false).build();
             float originY = titleBase - t.getLineBaseline(t.getLineCount() - 1);
             float capTop = originY + t.getLineBaseline(0) - Ui.cap(titlePaint);
-            c.drawText(Recs.periodLabel(), x, capTop - 30 * k, labelPaint);
+            if (!"photo".equals(s.pick.kind)) c.drawText(Recs.periodLabel(), x, capTop - 30 * k, labelPaint);
             c.save();
             c.translate(x - Ui.leftBearing(titlePaint, title), originY);
             t.draw(c);

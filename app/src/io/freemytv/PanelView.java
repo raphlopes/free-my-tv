@@ -43,6 +43,8 @@ final class PanelView extends View {
     private final float k;
     private final boolean tv = !Maison.projo();   // la TV : scènes du salon, sortie son, entrées branchées d'abord
     private float bottom, volume, slide;   // slide : 0 fermé .. 1 ouvert
+    private String lightsOn;   // les lampes allumées d'après le hub ; null : inconnu
+    private long epLeft;       // ce qui reste de l'épisode Stremio en cours (ms), 0 : inconnu
     private int index;
     private boolean open;
     private long lastFrame;
@@ -139,10 +141,16 @@ final class PanelView extends View {
         build();   // les entrées ont pu changer
         readVolume();
         if (tv) Sound.refresh(getContext(), this::invalidate);   // la sortie son : chaque processus (accueil, service) la relit
+        readLights();
+        epLeft = Maison.episodeLeft(() -> epLeft = Maison.episodeLeft(null));
         index = 0;   // le son : ce qu'on vient régler le plus souvent
         for (Cell c : cells) c.f = c == cells.get(0) ? 1 : 0;
         open = true;
         invalidate();
+    }
+
+    private void readLights() {
+        if (tv && Maison.hasHub()) Maison.lights(on -> { lightsOn = on; invalidate(); });
     }
 
     void close() {
@@ -219,12 +227,13 @@ final class PanelView extends View {
             case SLEEP:
                 Maison.sleep(app, null);
                 break;
-            case TIMER: {   // OK fait défiler : non, 30 min, 1 h, 2 h
+            case TIMER: {   // OK fait défiler : non, fin de l'épisode (-1, si Stremio la connaît), 30 min, 1 h, 2 h
                 android.content.SharedPreferences p = timerPrefs();
+                int[] steps = epLeft > 0 ? new int[] {0, -1, 30, 60, 120} : TIMER_STEPS;
                 int step = 0;
-                for (int i = 0; i < TIMER_STEPS.length; i++) if (TIMER_STEPS[i] == p.getInt("minutes", 0) && timerAt() > 0) step = i;
-                int minutes = TIMER_STEPS[(step + 1) % TIMER_STEPS.length];
-                long at = minutes == 0 ? 0 : System.currentTimeMillis() + minutes * 60_000L;
+                for (int i = 0; i < steps.length; i++) if (steps[i] == p.getInt("minutes", 0) && timerAt() > 0) step = i;
+                int minutes = steps[(step + 1) % steps.length];
+                long at = minutes == 0 ? 0 : System.currentTimeMillis() + (minutes < 0 ? epLeft + 60_000 : minutes * 60_000L);
                 android.app.AlarmManager am = (android.app.AlarmManager) app.getSystemService(Context.ALARM_SERVICE);
                 android.app.PendingIntent pi = android.app.PendingIntent.getBroadcast(app, 1,
                         new Intent(app, HomeReceiver.class).setAction(HomeReceiver.SLEEP),
@@ -260,6 +269,7 @@ final class PanelView extends View {
                     c.title = ok ? "Lancé" : "Injoignable";
                     c.warm = ok && !"eteindre".equals(c.action);
                     invalidate();
+                    postDelayed(this::readLights, 3_000);   // le temps que les lampes répondent
                 });
                 return;
             case VOLUME:   // TV : OK bascule haut-parleurs ⇄ barre de son
@@ -298,7 +308,7 @@ final class PanelView extends View {
 
     private String timerTitle() {
         long at = timerAt();
-        return at == 0 ? "Minuterie" : "Veille à " + Ui.clock(at);
+        return at == 0 ? "Minuterie" : (timerPrefs().getInt("minutes", 0) < 0 ? "Épisode " : "Veille à ") + Ui.clock(at);
     }
 
     private final android.content.BroadcastReceiver volumeChanged = new android.content.BroadcastReceiver() {
@@ -376,6 +386,12 @@ final class PanelView extends View {
             if (cell.kind == SCENE && "cinema".equals(cell.action)) {
                 section.setColor(MUTED);
                 c.drawText("SALON", r.left + 4, r.top - 22, section);
+                if (lightsOn != null) {   // ce qui est allumé, d'après le hub
+                    String on = lightsOn.isEmpty() ? "Tout est éteint"
+                            : android.text.TextUtils.ellipsize(lightsOn, meta, 380, android.text.TextUtils.TruncateAt.END).toString();
+                    meta.setColor(lightsOn.isEmpty() ? MUTED : WARM);
+                    c.drawText(on, W - PAD - 4 - meta.measureText(on), r.top - 22, meta);
+                }
             }
             if (f > 0) {   // le focus de l'accueil : un trait encre à 6 px du bord
                 stroke.setStrokeWidth(3);
@@ -427,6 +443,29 @@ final class PanelView extends View {
         }
         c.restore();
         if (moving) postInvalidateOnAnimation();
+    }
+
+    /** Une annonce du hub (sonnette, lessive…) : un bandeau en haut à droite, par-dessus ce qu'on regarde. Hauteur : 120 px de maquette. */
+    static View banner(Context c, String title, String text) {
+        float k = c.getResources().getDisplayMetrics().widthPixels / 1920f;
+        TextPaint big = text(MaisonView.font(c, "fonts/Geist.ttf", 500), 28, INK), small = text(MaisonView.font(c, "fonts/Geist.ttf", 500), 22, MUTED);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        return new View(c) {
+            @Override protected void onDraw(Canvas g) {
+                g.scale(k, k);
+                p.setStyle(Paint.Style.FILL);
+                p.setColor(BG);
+                g.drawRoundRect(1, 1, W - 1, 119, 28, 28, p);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(1.5f);
+                p.setColor(0x24EEF3F6);
+                g.drawRoundRect(1, 1, W - 1, 119, 28, 28, p);
+                MaisonView.icon(g, "bulb", PAD + 16, 60, 32, WARM);
+                float x = PAD + 32 + 20, w = W - x - PAD;
+                g.drawText(android.text.TextUtils.ellipsize(title, big, w, android.text.TextUtils.TruncateAt.END).toString(), x, text.isEmpty() ? 60 + Ui.cap(big) / 2 : 52, big);
+                if (!text.isEmpty()) g.drawText(android.text.TextUtils.ellipsize(text, small, w, android.text.TextUtils.TruncateAt.END).toString(), x, 88, small);
+            }
+        };
     }
 
     private static float ease(float t) {

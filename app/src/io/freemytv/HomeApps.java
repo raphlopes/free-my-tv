@@ -890,7 +890,7 @@ final class HomeApps {
     }
 
     /** Settings and the like: the icon in white on a dark card. */
-    private static synchronized Bitmap symbolTile(Context c, String key, String symbol) {
+    static synchronized Bitmap symbolTile(Context c, String key, String symbol) {
         if (TILES.containsKey(key)) return TILES.get(key);
         Bitmap b = darkTile();
         Symbols.draw(c, new Canvas(b), symbol, TILE_W / 2f, TILE_H / 2f, TILE_H * 0.36f, 0xF2FFFFFF);
