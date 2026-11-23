@@ -703,7 +703,8 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         Canvas c = s.caption.beginRecording(w, h);
         try {
             boolean art = "art".equals(s.pick.kind);   // un tableau du hub : son cartel (musée, titre, artiste et date)
-            float x = MARGIN * k, metaBase = META_BASE * k, titleBase = metaBase - 58 * k;
+            float x = MARGIN * k, metaBase = META_BASE * k, titleBase = metaBase - (art ? 46 : 58) * k, size = titlePaint.getTextSize();
+            if (art) titlePaint.setTextSize(size * 0.6f);   // les titres de tableaux sont longs : plus petits, ils tiennent en entier
             String title = s.pick.title == null ? "" : s.pick.title;
             StaticLayout t = StaticLayout.Builder.obtain(title, 0, title.length(), titlePaint, Math.round(TITLE_W * k))
                     .setMaxLines(2).setEllipsize(TextUtils.TruncateAt.END).setAlignment(Layout.Alignment.ALIGN_NORMAL)
@@ -715,6 +716,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             c.translate(x - Ui.leftBearing(titlePaint, title), originY);
             t.draw(c);
             c.restore();
+            titlePaint.setTextSize(size);
             if (s.pick.meta != null && !s.pick.meta.isEmpty()) c.drawText(s.pick.meta, x, metaBase, metaPaint);
         } finally {
             s.caption.endRecording();
