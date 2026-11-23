@@ -572,20 +572,39 @@ final class Maison {
 
     /** Les photos du hub déjà copiées ici (écran de veille). */
     static java.io.File[] photos(Context c) {
-        java.io.File[] f = new java.io.File(c.getCacheDir(), "photos").listFiles((d, n) -> !n.endsWith(".part"));
+        java.io.File[] f = new java.io.File(c.getCacheDir(), "photos").listFiles((d, n) -> !n.endsWith(".part") && !n.endsWith(".json"));
         return f == null ? new java.io.File[0] : f;
     }
 
-    /** Aligne le dossier local sur les photos paysage du hub (40 au plus), en fond : le hub les sert déjà à la taille de l'écran. */
+    /** Les cartels des tableaux du hub : nom de fichier -> {title, artist, date}. Vide si rien n'est encore copié. */
+    static org.json.JSONObject cartels(Context c) {
+        try {
+            return new org.json.JSONObject(new String(java.nio.file.Files.readAllBytes(
+                    new java.io.File(c.getCacheDir(), "photos/cartels.json").toPath()), "UTF-8"));
+        } catch (IOException | org.json.JSONException e) {
+            return new org.json.JSONObject();
+        }
+    }
+
+    /** Aligne le dossier local sur les tableaux du jour et les photos paysage du hub (60 au plus), en fond : le hub les sert déjà à la taille de l'écran. */
     static void syncPhotos(Context c) {
         if (!hasHub()) return;
         java.io.File dir = new java.io.File(c.getCacheDir(), "photos");
         io.execute(() -> {
             try {
-                org.json.JSONArray names = get(hub() + "/api/tv/photos").getJSONArray("photos");
+                org.json.JSONObject list = get(hub() + "/api/tv/photos"), cartels = new org.json.JSONObject();
+                org.json.JSONArray names = list.getJSONArray("photos"), art = list.optJSONArray("art");
+                for (int i = 0; art != null && i < art.length(); i++) {   // les tableaux : leur cartel, puis le même chemin que les photos
+                    cartels.put(art.getJSONObject(i).getString("name"), art.getJSONObject(i));
+                    names.put(art.getJSONObject(i).getString("name"));
+                }
                 Set<String> keep = new HashSet<>();
+                keep.add("cartels.json");
                 dir.mkdirs();
-                for (int i = 0; i < names.length() && i < 40; i++) {
+                try (java.io.FileOutputStream out = new java.io.FileOutputStream(new java.io.File(dir, "cartels.json"))) {
+                    out.write(cartels.toString().getBytes("UTF-8"));
+                }
+                for (int i = 0; i < names.length() && i < 60; i++) {
                     String name = names.getString(i);
                     java.io.File f = new java.io.File(dir, name.replaceAll("[^A-Za-z0-9._-]", "_")), part = new java.io.File(dir, f.getName() + ".part");
                     keep.add(f.getName());

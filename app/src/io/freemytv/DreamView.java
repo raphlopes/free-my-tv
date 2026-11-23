@@ -58,7 +58,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         final Bitmap image, frost;
         final BitmapShader shader;    // the frosted version, for the clock's glass
         final float lightCaption, lightClock;
-        final boolean zoomIn;
+        final boolean zoomIn, still;   // still : un tableau encadré ne bouge pas
         final float panX, panY;
         final Recording caption = Recording.create("caption");
         long startedAt;
@@ -72,6 +72,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             this.lightCaption = lightCaption;
             this.lightClock = lightClock;
             zoomIn = n % 2 == 0;
+            still = "art".equals(pick.kind);
             // Toward one of the corners, alternating, without repeating the previous one.
             panX = (n / 2) % 2 == 0 ? 0.8f : -0.8f;
             panY = n % 3 == 0 ? -0.6f : 0.6f;
@@ -288,7 +289,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             prepared = newSlide(pick, last.image, last.frost, last.lightCaption, last.lightClock);
             return;
         }
-        File file = "photo".equals(pick.kind) ? new File(pick.backdrop) : recs.readyImage(pick);
+        File file = "photo".equals(pick.kind) || "art".equals(pick.kind) ? new File(pick.backdrop) : recs.readyImage(pick);
         if (file == null) {
             failed.add(Recs.key(pick));   // the image is gone from disk: try the next one
             prepareNext();
@@ -325,11 +326,12 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         });
     }
 
-    /** Les photos du hub quand il y en a (sans légende), sinon les titres à l'affiche. */
+    /** Les tableaux et les photos du hub quand il y en a (mêlés, dans un ordre stable), sinon les titres à l'affiche. */
     private List<Recs.Pick> showcase() {
         File[] photos = Maison.photos(getContext());
         if (photos.length == 0) return recs.showcase();
-        java.util.Arrays.sort(photos);
+        java.util.Arrays.sort(photos, (a, b) -> Integer.compare(a.getName().hashCode(), b.getName().hashCode()));
+        org.json.JSONObject cartels = Maison.cartels(getContext());
         List<Recs.Pick> out = new java.util.ArrayList<>();
         for (File f : photos) {
             Recs.Pick p = new Recs.Pick();
@@ -337,6 +339,12 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             p.id = f.getName().hashCode();
             p.title = "";
             p.backdrop = f.getPath();
+            org.json.JSONObject cartel = cartels.optJSONObject(f.getName());
+            if (cartel != null) {   // un tableau : déjà encadré par le hub, le cartel à droite
+                p.kind = "art";
+                p.title = cartel.optString("title");
+                p.meta = cartel.optString("artist") + (cartel.optString("date").isEmpty() ? "" : " · " + cartel.optString("date"));
+            }
             out.add(p);
         }
         return out;
@@ -394,7 +402,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     /** Photo position and scale now: zoom from 1 to 1.1 (or back) and a pan toward a corner, never showing an edge. */
     private void place(Slide s, long up, float[] out) {
         float u = Ui.clamp((up - s.startedAt) / (float) (SHOW_MS + FADE_MS));
-        float f = s.zoomIn ? u : 1 - u;
+        float f = s.still ? 0 : s.zoomIn ? u : 1 - u;
         float z = 1 + ZOOM * f;
         float rx = w * (z - 1) / 2, ry = h * (z - 1) / 2;
         out[0] = rx * (s.panX * f - 1);
@@ -695,18 +703,22 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
     private void recordCaption(Slide s) {
         Canvas c = s.caption.beginRecording(w, h);
         try {
-            float x = MARGIN * k, metaBase = META_BASE * k, titleBase = metaBase - 58 * k;
+            // Un tableau : le cartel à droite du cadre (sous l'heure), en plus petit ; sinon la légende en bas à gauche.
+            boolean art = "art".equals(s.pick.kind);
+            float x = (art ? 1320 : MARGIN) * k, metaBase = META_BASE * k, titleBase = metaBase - 58 * k, size = titlePaint.getTextSize();
+            if (art) titlePaint.setTextSize(size * 0.55f);
             String title = s.pick.title == null ? "" : s.pick.title;
-            StaticLayout t = StaticLayout.Builder.obtain(title, 0, title.length(), titlePaint, Math.round(TITLE_W * k))
+            StaticLayout t = StaticLayout.Builder.obtain(title, 0, title.length(), titlePaint, Math.round((art ? 520 : TITLE_W) * k))
                     .setMaxLines(2).setEllipsize(TextUtils.TruncateAt.END).setAlignment(Layout.Alignment.ALIGN_NORMAL)
                     .setIncludePad(false).build();
             float originY = titleBase - t.getLineBaseline(t.getLineCount() - 1);
             float capTop = originY + t.getLineBaseline(0) - Ui.cap(titlePaint);
-            if (!"photo".equals(s.pick.kind)) c.drawText(Recs.periodLabel(), x, capTop - 30 * k, labelPaint);
+            if (!"photo".equals(s.pick.kind)) c.drawText(art ? "CLEVELAND MUSEUM OF ART" : Recs.periodLabel(), x, capTop - 30 * k, labelPaint);
             c.save();
             c.translate(x - Ui.leftBearing(titlePaint, title), originY);
             t.draw(c);
             c.restore();
+            titlePaint.setTextSize(size);
             if (s.pick.meta != null && !s.pick.meta.isEmpty()) c.drawText(s.pick.meta, x, metaBase, metaPaint);
         } finally {
             s.caption.endRecording();
